@@ -10,6 +10,7 @@ import { Login } from './components/Login';
 import { SearchAndFilter } from './components/SearchAndFilter';
 import { ProductList } from './components/ProductList';
 import { ProductFormModal } from './components/ProductFormModal';
+import { ProductHistoryModal } from './components/ProductHistoryModal';
 import { clearProductImageCache } from './services/storageService';
 import './App.css';
 
@@ -48,6 +49,11 @@ export function App() {
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
   const addBtnRef = useRef<HTMLButtonElement | null>(null);
   const activeTriggerRef = useRef<HTMLElement | null>(null);
+
+  // 5.1 Quản lý modal Lịch sử sản phẩm
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [selectedHistoryProduct, setSelectedHistoryProduct] = useState<Product | null>(null);
+  const historyTriggerRef = useRef<HTMLElement | null>(null);
 
   // 6. Thông báo Toast
   const [toast, setToast] = useState<ToastNotification | null>(null);
@@ -91,6 +97,8 @@ export function App() {
         setSession(null);
         setIsModalOpen(false);
         setProductToEdit(null);
+        setIsHistoryModalOpen(false);
+        setSelectedHistoryProduct(null);
         setMember(null);
         setProducts([]);
         setIsUnauthorized(false);
@@ -216,6 +224,8 @@ export function App() {
     // Đóng form nếu đang mở
     setIsModalOpen(false);
     setProductToEdit(null);
+    setIsHistoryModalOpen(false);
+    setSelectedHistoryProduct(null);
 
     try {
       const { error } = await supabase.auth.signOut();
@@ -261,10 +271,23 @@ export function App() {
     setIsModalOpen(true);
   }, []);
 
-  // Đóng modal
+  // Đóng modal Thêm / Sửa
   const handleCloseModal = useCallback(() => {
     setIsModalOpen(false);
     setProductToEdit(null);
+  }, []);
+
+  // Mở modal Lịch sử sản phẩm
+  const handleOpenHistoryModal = useCallback((prod: Product, triggerEl: HTMLElement) => {
+    setSelectedHistoryProduct(prod);
+    historyTriggerRef.current = triggerEl;
+    setIsHistoryModalOpen(true);
+  }, []);
+
+  // Đóng modal Lịch sử sản phẩm
+  const handleCloseHistoryModal = useCallback(() => {
+    setIsHistoryModalOpen(false);
+    setSelectedHistoryProduct(null);
   }, []);
 
   // Xử lý sau khi lưu sản phẩm thành công
@@ -565,6 +588,7 @@ export function App() {
                 hasFiltersApplied={hasFiltersApplied}
                 canEdit={canEdit}
                 onEdit={handleOpenEditModal}
+                onViewHistory={handleOpenHistoryModal}
                 onOpenAddModal={handleOpenAddModal}
               />
             </>
@@ -586,6 +610,16 @@ export function App() {
         onSaveSuccess={handleSaveSuccess}
         triggerElementRef={activeTriggerRef}
       />
+
+      {/* Modal Lịch sử thay đổi sản phẩm */}
+      {isHistoryModalOpen && selectedHistoryProduct && (
+        <ProductHistoryModal
+          isOpen={isHistoryModalOpen}
+          product={selectedHistoryProduct}
+          onClose={handleCloseHistoryModal}
+          triggerElementRef={historyTriggerRef}
+        />
+      )}
     </div>
   );
 }

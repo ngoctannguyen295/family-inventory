@@ -149,3 +149,77 @@ Ví dụ:
 - **Khi thay đổi ảnh sản phẩm:** Ứng dụng sẽ tải file mới lên với UUID mới và tham số `upsert = false`. Sau khi tải lên thành công, client cập nhật trường `image_url` của sản phẩm sang đường dẫn mới.
 - **Dọn dẹp ảnh cũ:** File ảnh cũ vẫn sẽ nằm trong bucket và chưa tự động xóa ở bước này.
 - **File mồ côi (Orphaned files):** Trong trường hợp người dùng chọn tải ảnh lên nhưng sau đó hủy form lưu sản phẩm, file đó đã tồn tại trong bucket nhưng không gắn với sản phẩm nào. Một tiến trình dọn dẹp định kỳ (Storage cleanup cron job / Edge Function) sẽ được thiết kế ở các giai đoạn tiếp theo để quét và xóa các file mồ côi này.
+
+---
+
+## 6. Lịch sử Thay đổi Sản phẩm (Product History & Audit Trail)
+
+Migration: [supabase/migrations/20260910031500_create_product_history.sql](file:///c:/Users/Ngoc%20Tan/Projects/family-inventory/supabase/migrations/20260910031500_create_product_history.sql)
+
+### 6.1 Cấu trúc Bảng `public.product_history`
+Lưu vết từng lần thêm mới hoặc chỉnh sửa sản phẩm trong cùng một giao dịch cơ sở dữ liệu:
+
+- **`id`** (`uuid`, Primary Key, default `gen_random_uuid()`): Mã định danh duy nhất của bản ghi lịch sử.
+- **`product_id`** (`uuid`, NOT NULL): Khóa ngoại tham chiếu đến `public.products(id)` với ràng buộc `ON DELETE RESTRICT` (ngăn chặn xóa sản phẩm nếu đã có lịch sử).
+- **`action`** (`text`, NOT NULL): Loại thao tác, ràng buộc CHECK chỉ nhận `'create'` hoặc `'update'`.
+- **`actor_id`** (`uuid`, Nullable): Khóa ngoại tham chiếu `auth.users(id)` với `ON DELETE SET NULL`. Lưu UID người thực hiện tại thời điểm thao tác.
+- **`actor_name`** (`text`, NOT NULL): Tên hiển thị của người thực hiện tại thời điểm ghi nhận (lấy từ `family_members.display_name`). Nếu không có auth session, lưu `'Hệ thống / thao tác quản trị'`; nếu có UID nhưng chưa có tên trong `family_members`, lưu `'Người dùng không xác định'`.
+- **`changed_at`** (`timestamptz`, NOT NULL): Thời điểm ghi nhận do máy chủ sinh (`pg_catalog.now()`), không phụ thuộc vào trường `products.updated_at`.
+- **`old_values`** (`jsonb`, Nullable): Giá trị của 10 trường nghiệp vụ trước khi thay đổi (chứa `NULL` khi tạo mới).
+- **`new_values`** (`jsonb`, NOT NULL): Giá trị của 10 trường nghiệp vụ sau khi thay đổi.
+- **`changed_fields`** (`text[]`, NOT NULL): Danh sách tên các trường có thay đổi thực tế. Khi tạo mới (`create`), chứa danh sách toàn bộ 10 trường nghiệp vụ được theo dõi.
+
+Chỉ mục phục vụ tra cứu lịch sử:
+```sql
+CREATE INDEX IF NOT EXISTS product_history_product_id_changed_at_idx
+  ON public.product_history (product_id, changed_at DESC, id DESC);
+```
+
+### 6.2 Cơ chế Trigger `trg_products_history` và Hàm `log_product_history()`
+- **Thời điểm kích hoạt:** `AFTER INSERT OR UPDATE ON public.products FOR EACH ROW`.
+- **Bảo mật hàm (Function Security):**
+  - Khai báo `SECURITY DEFINER` để hàm thực thi với quyền của người tạo trigger, cho phép ghi vào bảng `product_history` mà không cần cấp quyền INSERT cho client.
+  - Cố định `SET search_path = ''` và sử dụng tên schema đầy đủ (`pg_catalog.*`, `public.*`, `auth.*`) nhằm triệt tiêu nguy cơ tấn công chiếm quyền qua search_path.
+  - Đã thu hồi quyền thực thi trực tiếp: `REVOKE EXECUTE ON FUNCTION public.log_product_history() FROM PUBLIC, anon, authenticated;` (không thể gọi qua RPC API).
+- **10 trường nghiệp vụ được theo dõi:**
+  `code`, `barcode`, `name`, `category`, `unit`, `image_url`, `purchase_price`, `sale_price`, `stock`, `notes`.
+- **So sánh thay đổi bằng `IS DISTINCT FROM`:** Đảm bảo nhận diện chính xác các trường chuyển từ `NULL` sang có giá trị hoặc ngược lại (ví dụ cập nhật mã vạch hoặc ảnh).
+- **Bỏ qua thay đổi rỗng:** Nếu câu lệnh `UPDATE` không làm thay đổi giá trị thực tế của bất kỳ trường nào trong 10 trường trên (ví dụ chỉ cập nhật trường `updated_at`), trigger sẽ bỏ qua và không ghi thêm dòng lịch sử rác.
+- **Tính toàn vẹn giao dịch (Atomicity):** Không sử dụng khối `EXCEPTION` nuốt lỗi; nếu việc ghi lịch sử gặp sự cố, toàn bộ thao tác lưu sản phẩm sẽ bị hủy bỏ (Rollback) để bảo đảm tính nhất quán.
+
+### 6.3 Ma trận Phân quyền trên `product_history`
+
+| Vai trò | Đọc lịch sử (SELECT) | Ghi lịch sử (INSERT) | Sửa lịch sử (UPDATE) | Xóa lịch sử (DELETE) |
+|---|:---:|:---:|:---:|:---:|
+| **Khách vãng lai (`anon`)** | ❌ Từ chối | ❌ Từ chối | ❌ Từ chối | ❌ Từ chối |
+| **Thành viên bị khóa (`is_active = false`)** | ❌ Rỗng (0 dòng) | ❌ Từ chối | ❌ Từ chối | ❌ Từ chối |
+| **Thành viên chỉ xem (`can_edit = false`)** | ✅ Được xem toàn bộ | ❌ Từ chối | ❌ Từ chối | ❌ Từ chối |
+| **Thành viên chỉnh sửa (`can_edit = true`)** | ✅ Được xem toàn bộ | ❌ Bị chặn (Chỉ trigger ghi) | ❌ Từ chối | ❌ Từ chối |
+
+### 6.4 Lưu ý Quan trọng về Phạm vi và Tính chất Dữ liệu
+1. **Thời điểm bắt đầu ghi vết:** Lịch sử thay đổi chỉ bắt đầu được lưu lại từ thời điểm migration này được chạy trên Supabase. Hệ thống **không tạo dữ liệu lịch sử giả định** cho các sản phẩm đã được tạo trước đó.
+2. **Chức năng ghi vết, chưa phải chức năng hoàn tác:** Bảng `product_history` đóng vai trò là nhật ký kiểm toán (Audit Log) minh bạch cho các thành viên trong gia đình theo dõi ai đã sửa giá hay tồn kho; đây chưa phải là tính năng hoàn tác (Undo/Revert) tự động.
+3. **Quyền hạn quản trị:** Quản trị viên cơ sở dữ liệu (Database Administrator / Service Role) khi thao tác trực tiếp trên Supabase Dashboard vẫn có đầy đủ quyền quản trị hệ thống; tài liệu không coi lịch sử là bất biến tuyệt đối ở cấp độ hạ tầng.
+
+---
+
+## 7. Kịch bản Kiểm thử RLS & Trigger Lịch sử Sản phẩm
+
+Sau khi chạy migration `20260910031500_create_product_history.sql`, hãy kiểm tra các kịch bản sau trong SQL Editor:
+
+1. **Kiểm tra khi tạo mới sản phẩm (`INSERT`)**:
+   - Thêm 1 sản phẩm mới vào `public.products`.
+   - Kiểm tra `public.product_history`: Xuất hiện 1 dòng với `action = 'create'`, `old_values IS NULL`, `new_values` chứa đủ 10 trường, `changed_fields` có đủ 10 trường.
+2. **Kiểm tra khi cập nhật giá bán hoặc số lượng tồn (`UPDATE`)**:
+   - Sửa `sale_price` từ `30000` thành `35000`.
+   - Kiểm tra `product_history`: Xuất hiện 1 dòng mới với `action = 'update'`, `old_values->>'sale_price' = '30000'`, `new_values->>'sale_price' = '35000'`, `changed_fields = ARRAY['sale_price']`.
+3. **Kiểm tra cập nhật không có thay đổi nghiệp vụ**:
+   - Chạy lệnh `UPDATE public.products SET notes = notes WHERE id = '...';`
+   - Kiểm tra `product_history`: Số lượng dòng lịch sử không tăng thêm.
+4. **Kiểm tra ghi nhận người thực hiện (`actor_name`)**:
+   - Đăng nhập bằng tài khoản thành viên (ví dụ tên hiển thị "Ngọc Tân") và sửa tồn kho.
+   - Kiểm tra dòng lịch sử: `actor_name = 'Ngọc Tân'` và `actor_id = <UID người đăng nhập>`.
+5. **Kiểm tra bảo mật: Client bị chặn ghi/sửa lịch sử**:
+   - Sử dụng phiên đăng nhập của người dùng gọi trực tiếp `supabase.from('product_history').insert(...)` hoặc `.update(...)` hoặc `.delete(...)`.
+   - **Kết quả:** Bị từ chối với mã lỗi `42501 (Permission denied)` do không có quyền và không có policy cho phép ghi từ client.
+

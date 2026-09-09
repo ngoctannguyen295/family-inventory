@@ -162,3 +162,66 @@ Sau khi đăng nhập bằng tài khoản có quyền `can_edit = true`, hãy th
 2. **Kết quả**: Các thẻ sản phẩm lọc tức thì mà **không bị tải lại ảnh từ máy chủ hay nhấp nháy trắng** nhờ cơ chế In-Memory Object URL Cache.
 3. Đăng xuất khỏi tài khoản: Toàn bộ Object URL được tự động thu hồi (`URL.revokeObjectURL`) và dọn dẹp sạch sẽ khỏi RAM trình duyệt.
 
+---
+
+## 5. Kịch bản Kiểm thử Giao diện Lịch sử Thay đổi Sản phẩm (Product History)
+
+Hệ thống ghi nhận nhật ký tự động vào bảng `public.product_history` qua trigger cơ sở dữ liệu mỗi khi sản phẩm được tạo mới (`create`) hoặc cập nhật (`update`).
+
+### 5.1 Quyền xem lịch sử
+- **Tất cả thành viên gia đình đang hoạt động (`is_active = true`)** đều nhìn thấy nút **"Lịch sử"** trên thẻ sản phẩm và có quyền mở xem nhật ký thay đổi.
+- Thành viên chỉ xem (`can_edit = false`) vẫn xem được đầy đủ lịch sử của mọi sản phẩm.
+- Chính sách RLS trên Supabase bảo vệ quyền `SELECT` độc lập ở tầng máy chủ.
+
+---
+
+### 5.2 Các Kịch bản Kiểm thử Giao diện
+
+#### Kịch bản 14: Xem nhật ký tạo mới sản phẩm (Create)
+1. Trên thẻ một sản phẩm vừa được tạo gần đây, bấm nút **"Lịch sử"** (icon 🕒).
+2. **Kết quả**:
+   - Modal mở lên với tiêu đề hiển thị tên sản phẩm và mã hàng (ví dụ: `[00101] Gạo ST25 Ông Cua Túi 5kg`).
+   - Xuất hiện bản ghi tạo mới với huy hiệu màu xanh lá **"Tạo sản phẩm"**.
+   - Hiển thị người thực hiện (`actor_name`) và thời gian ghi nhận theo định dạng ngày giờ Việt Nam kèm chú thích `(Giờ Việt Nam)`.
+   - Danh sách chi tiết thể hiện toàn bộ giá trị ban đầu: Mã hàng, Tên sản phẩm, Danh mục, Đơn vị tính, Giá nhập, Giá bán, Tồn kho ban đầu, Mã vạch (nếu có), Ghi chú (nếu có) và trạng thái ảnh ("Có ảnh" hoặc "Chưa có ảnh").
+   - Giá hiển thị định dạng tiền tệ `₫`, số tồn kho giữ đúng định dạng thập phân và gắn kèm đơn vị tính tại thời điểm tạo.
+
+#### Kịch bản 15: Xem nhật ký cập nhật sản phẩm (Update)
+1. Bấm **"Chỉnh sửa"** một sản phẩm: thay đổi giá bán từ `195.000` thành `200.000` và tồn kho từ `15` thành `10`, sau đó bấm **"Lưu thay đổi"**.
+2. Bấm nút **"Lịch sử"** của sản phẩm đó:
+3. **Kết quả**:
+   - Dòng thời gian hiển thị bản ghi mới nhất ở trên cùng với huy hiệu màu xanh dương **"Cập nhật sản phẩm"**.
+   - Chỉ hiển thị các trường có sự thay đổi:
+     - **Giá bán**: `195.000 ₫` ➔ `200.000 ₫`
+     - **Số lượng tồn kho**: `15 túi` ➔ `10 túi`
+   - Các trường không thay đổi (như Tên, Đơn vị tính, Ghi chú) được ẩn đi để nhật ký ngắn gọn, trực quan.
+
+#### Kịch bản 16: Thay đổi ảnh sản phẩm trong nhật ký
+1. Chỉnh sửa một sản phẩm để thêm ảnh mới hoặc thay thế ảnh cũ.
+2. Mở modal **"Lịch sử"**:
+3. **Kết quả**:
+   - Trường **Ảnh sản phẩm** hiển thị rõ ràng:
+     - Nếu thêm ảnh mới cho sản phẩm trước đó chưa có ảnh: `Chưa có ảnh` ➔ `Có ảnh`.
+     - Nếu đổi sang ảnh khác: `Đã thay ảnh`.
+   - Tuyệt đối **không hiển thị** chuỗi đường dẫn Storage thô hay ký tự JSON khó hiểu.
+
+#### Kịch bản 17: Phân trang và tải thêm nhật ký (Load More)
+1. Với sản phẩm có hơn 20 lần chỉnh sửa:
+2. Modal mở ban đầu tải đúng **20 bản ghi** mới nhất.
+3. Cuối danh sách hiển thị nút **"Tải thêm lịch sử"**.
+4. Bấm nút: tải tiếp trang kế tiếp (thêm 20 bản ghi) và nối liền vào dòng thời gian mà không bị nhảy trang.
+5. Khi đã tải hết toàn bộ lịch sử: nút tải thêm tự động ẩn đi.
+6. Đóng modal và mở lại: danh sách được làm mới và tải lại từ đầu.
+
+#### Kịch bản 18: Trạng thái trống và trạng thái lỗi mạng
+1. Mở lịch sử của sản phẩm cũ được tạo trước khi bật hệ thống trigger:
+   - **Kết quả**: Hiển thị bảng thông báo trống: *"Chưa có lịch sử thay đổi"* kèm chú thích *"Lịch sử chỉ ghi nhận từ khi tính năng được kích hoạt trên hệ thống"*.
+2. Nếu mất kết nối mạng trong lúc mở modal:
+   - **Kết quả**: Hiển thị thông báo lỗi thân thiện kèm nút **"Thử lại"**. Bấm nút này hệ thống tự động gửi lại truy vấn.
+
+#### Kịch bản 19: Điều hướng bàn phím & Bảo mật phiên làm việc
+1. Nhấn phím `Escape` khi modal lịch sử đang mở:
+   - **Kết quả**: Modal đóng ngay lập tức, tiêu điểm bàn phím (focus) tự động quay về nút "Lịch sử" của thẻ sản phẩm vừa thao tác.
+2. Khi đang mở modal lịch sử mà tài khoản bị đăng xuất hoặc hết hạn phiên:
+   - **Kết quả**: Modal lịch sử tự động đóng ngay lập tức, dữ liệu trong modal được xóa để đảm bảo an toàn thông tin.
+

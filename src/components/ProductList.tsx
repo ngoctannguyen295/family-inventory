@@ -8,6 +8,7 @@ interface ProductListProps {
   hasFiltersApplied: boolean;
   canEdit?: boolean;
   onEdit?: (product: Product, triggerEl: HTMLElement) => void;
+  onViewHistory?: (product: Product, triggerEl: HTMLElement) => void;
   onOpenAddModal?: () => void;
 }
 
@@ -18,6 +19,7 @@ export function ProductList({
   hasFiltersApplied,
   canEdit,
   onEdit,
+  onViewHistory,
   onOpenAddModal,
 }: ProductListProps) {
   // Trường hợp cơ sở dữ liệu hoàn toàn chưa có sản phẩm nào
@@ -104,6 +106,7 @@ export function ProductList({
           product={product}
           canEdit={canEdit}
           onEdit={onEdit}
+          onViewHistory={onViewHistory}
         />
       ))}
     </div>
