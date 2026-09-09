@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="milkBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EFF6FF" />
+      <stop offset="100%" stop-color="#DBEAFE" />
+    </linearGradient>
+  </defs>
+  <rect width="200" height="200" rx="24" fill="url(#milkBg)" />
+  <!-- Can top rim -->
+  <ellipse cx="100" cy="55" rx="42" ry="14" fill="#94A3B8" />
+  <ellipse cx="100" cy="53" rx="38" ry="12" fill="#E2E8F0" />
+  <!-- Can body -->
+  <path d="M58 55 L58 145 C58 155 76 162 100 162 C124 162 142 155 142 145 L142 55 Z" fill="#DC2626" />
+  <ellipse cx="100" cy="145" rx="42" ry="12" fill="#B91C1C" />
+  <!-- Yellow Label banner -->
+  <rect x="58" y="80" width="84" height="48" fill="#FDE047" />
+  <circle cx="100" cy="98" r="14" fill="#F97316" />
+  <text x="100" y="103" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="#FFFFFF" text-anchor="middle">THỌ</text>
+  <text x="100" y="122" font-family="system-ui, sans-serif" font-size="9" font-weight="bold" fill="#DC2626" text-anchor="middle">ÔNG THỌ ĐỎ</text>
+  <text x="100" y="140" font-family="system-ui, sans-serif" font-size="8" fill="#FFFFFF" text-anchor="middle">380g</text>
+</svg>

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="coffeeBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F5F5F4" />
+      <stop offset="100%" stop-color="#E7E5E4" />
+    </linearGradient>
+  </defs>
+  <rect width="200" height="200" rx="24" fill="url(#coffeeBg)" />
+  <!-- Coffee Box -->
+  <rect x="52" y="48" width="96" height="110" rx="8" fill="#1C1917" />
+  <rect x="56" y="52" width="88" height="102" rx="6" fill="#292524" />
+  <!-- Red header stripe -->
+  <path d="M56 58 L144 58 L144 95 L56 95 Z" fill="#DC2626" />
+  <text x="100" y="87" font-family="system-ui, sans-serif" font-size="24" font-weight="900" fill="#FFFFFF" text-anchor="middle" font-style="italic">G7</text>
+  <!-- Coffee cup silhouette -->
+  <path d="M80 115 C80 135 120 135 120 115 Z" fill="#F59E0B" />
+  <path d="M120 120 C125 120 128 123 125 127" stroke="#F59E0B" stroke-width="2" fill="none" />
+  <text x="100" y="148" font-family="system-ui, sans-serif" font-size="8" font-weight="bold" fill="#D6D3D1" text-anchor="middle">CÀ PHÊ THỨ THIỆT</text>
+</svg>

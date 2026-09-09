@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="laundryBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EEF2FF" />
+      <stop offset="100%" stop-color="#E0E7FF" />
+    </linearGradient>
+  </defs>
+  <rect width="200" height="200" rx="24" fill="url(#laundryBg)" />
+  <!-- Detergent Bag / Box -->
+  <path d="M60 62 L140 62 L148 160 C148 165 142 168 100 168 C58 168 52 165 52 160 Z" fill="#2563EB" />
+  <!-- Bag top handle -->
+  <path d="M82 45 C82 38 118 38 118 45 L118 62 L82 62 Z" fill="#1D4ED8" />
+  <rect x="90" y="48" width="20" height="8" rx="4" fill="#FFFFFF" />
+  <!-- Brand starburst -->
+  <path d="M100 78 L104 88 L114 84 L108 93 L118 97 L107 101 L112 110 L102 106 L100 116 L98 106 L88 110 L93 101 L82 97 L92 93 L86 84 L96 88 Z" fill="#EF4444" />
+  <text x="100" y="103" font-family="system-ui, sans-serif" font-size="14" font-weight="900" fill="#FFFFFF" text-anchor="middle">OMO</text>
+  <text x="100" y="132" font-family="system-ui, sans-serif" font-size="9" font-weight="bold" fill="#FDE047" text-anchor="middle">COMFORT</text>
+  <text x="100" y="148" font-family="system-ui, sans-serif" font-size="8" fill="#DBEAFE" text-anchor="middle">Túi 3.0 kg</text>
+</svg>

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="riceBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FEF3C7" />
+      <stop offset="100%" stop-color="#FDE68A" />
+    </linearGradient>
+  </defs>
+  <rect width="200" height="200" rx="24" fill="url(#riceBg)" />
+  <!-- Rice Sack Illustration -->
+  <path d="M60 85 C60 70 85 65 100 65 C115 65 140 70 140 85 L145 150 C145 160 135 165 100 165 C65 165 55 160 55 150 Z" fill="#D97706" />
+  <path d="M65 88 C65 76 88 72 100 72 C112 72 135 76 135 88 L140 146 C140 154 130 158 100 158 C70 158 60 154 60 146 Z" fill="#F59E0B" />
+  <!-- Tie String -->
+  <rect x="75" y="80" width="50" height="8" rx="4" fill="#92400E" />
+  <!-- Label badge on sack -->
+  <rect x="78" y="105" width="44" height="28" rx="4" fill="#FFFBEB" />
+  <text x="100" y="123" font-family="system-ui, sans-serif" font-size="12" font-weight="bold" fill="#B45309" text-anchor="middle">ST25</text>
+  <!-- Rice grains -->
+  <circle cx="100" cy="50" r="3" fill="#D97706" />
+  <circle cx="94" cy="54" r="3" fill="#D97706" />
+  <circle cx="106" cy="54" r="3" fill="#D97706" />
+</svg>
