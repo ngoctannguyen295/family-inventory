@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import type { Product } from './types/product';
@@ -9,13 +9,22 @@ import { Header } from './components/Header';
 import { Login } from './components/Login';
 import { SearchAndFilter } from './components/SearchAndFilter';
 import { ProductList } from './components/ProductList';
+import { ProductFormModal } from './components/ProductFormModal';
 import './App.css';
+
+interface ToastNotification {
+  text: string;
+  type: 'success' | 'info' | 'warning';
+  actionLabel?: string;
+  onAction?: () => void;
+}
 
 export function App() {
   // 1. Quản lý trạng thái phiên đăng nhập
   const [session, setSession] = useState<Session | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState(() => isSupabaseConfigured);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
 
   // 2. Quản lý trạng thái thành viên gia đình
   const [member, setMember] = useState<FamilyMember | null>(null);
@@ -33,6 +42,27 @@ export function App() {
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [retryCounter, setRetryCounter] = useState(0);
 
+  // 5. Quản lý modal Thêm / Sửa sản phẩm
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [productToEdit, setProductToEdit] = useState<Product | null>(null);
+  const addBtnRef = useRef<HTMLButtonElement | null>(null);
+  const activeTriggerRef = useRef<HTMLElement | null>(null);
+
+  // 6. Thông báo Toast
+  const [toast, setToast] = useState<ToastNotification | null>(null);
+  const toastTimeoutRef = useRef<number | null>(null);
+
+  const showToast = useCallback((notification: ToastNotification) => {
+    if (toastTimeoutRef.current) {
+      window.clearTimeout(toastTimeoutRef.current);
+    }
+    setToast(notification);
+    // Tự động đóng toast sau 7 giây
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToast(null);
+    }, 7000);
+  }, []);
+
   // Kiểm tra phiên đăng nhập và theo dõi onAuthStateChange
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
@@ -40,7 +70,6 @@ export function App() {
     }
 
     let isMounted = true;
-
 
     // Lấy phiên ban đầu
     supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
@@ -53,11 +82,13 @@ export function App() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, currentSession) => {
-      setSession(currentSession);
       setIsAuthChecking(false);
 
       if (!currentSession) {
-        // Đăng xuất: xóa ngay dữ liệu thành viên và sản phẩm khỏi state
+        // Đăng xuất hoặc đổi tài khoản: đóng modal và xóa toàn bộ dữ liệu
+        setSession(null);
+        setIsModalOpen(false);
+        setProductToEdit(null);
         setMember(null);
         setProducts([]);
         setIsUnauthorized(false);
@@ -65,23 +96,40 @@ export function App() {
         setProductsError(null);
         setSearchTerm('');
         setSelectedCategory('ALL');
+        setToast(null);
+        return;
       }
+
+      setSession((prev) => {
+        // Nếu user id và token không đổi, giữ nguyên reference để tránh trigger effect thừa
+        if (
+          prev?.user?.id === currentSession.user.id &&
+          prev?.access_token === currentSession.access_token
+        ) {
+          return prev;
+        }
+        return currentSession;
+      });
     });
 
     return () => {
       isMounted = false;
       subscription.unsubscribe();
+      if (toastTimeoutRef.current) {
+        window.clearTimeout(toastTimeoutRef.current);
+      }
     };
   }, []);
 
+  const userId = session?.user?.id;
+
   // Tải thông tin thành viên và danh mục sản phẩm từ Supabase
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase || !session?.user) {
+    if (!isSupabaseConfigured || !supabase || !userId) {
       return;
     }
 
     let isMounted = true;
-    const currentUserId = session.user.id;
 
     async function loadData() {
       setIsMemberLoading(true);
@@ -93,7 +141,7 @@ export function App() {
         const { data: memberData, error: memberErr } = await supabase!
           .from('family_members')
           .select('*')
-          .eq('user_id', currentUserId)
+          .eq('user_id', userId)
           .maybeSingle();
 
         if (!isMounted) return;
@@ -149,24 +197,37 @@ export function App() {
     return () => {
       isMounted = false;
     };
-  }, [session?.user, retryCounter]);
+  }, [userId, retryCounter]);
 
-  // Xử lý đăng xuất
+  // Xử lý đăng xuất an toàn (kiểm tra cả error của Supabase)
   const handleSignOut = useCallback(async () => {
     if (!supabase) return;
     setIsSigningOut(true);
+    setSignOutError(null);
 
-    // Xóa state ngay lập tức
-    setMember(null);
-    setProducts([]);
-    setIsUnauthorized(false);
-    setMemberError(null);
-    setProductsError(null);
+    // Đóng form nếu đang mở
+    setIsModalOpen(false);
+    setProductToEdit(null);
 
     try {
-      await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        setSignOutError(`Đăng xuất thất bại: ${error.message}. Vui lòng thử lại.`);
+        setIsSigningOut(false);
+        return;
+      }
+
+      // Đăng xuất thành công: xóa ngay state
+      setMember(null);
+      setProducts([]);
+      setIsUnauthorized(false);
+      setMemberError(null);
+      setProductsError(null);
+      setSearchTerm('');
+      setSelectedCategory('ALL');
+      setToast(null);
     } catch {
-      // Bỏ qua lỗi sign out nếu có
+      setSignOutError('Lỗi kết nối mạng khi đăng xuất. Vui lòng thử lại.');
     } finally {
       setIsSigningOut(false);
     }
@@ -176,6 +237,73 @@ export function App() {
   const handleRetry = useCallback(() => {
     setRetryCounter((prev) => prev + 1);
   }, []);
+
+  // Mở modal Thêm mới
+  const handleOpenAddModal = useCallback(() => {
+    setProductToEdit(null);
+    activeTriggerRef.current = addBtnRef.current;
+    setIsModalOpen(true);
+  }, []);
+
+  // Mở modal Sửa
+  const handleOpenEditModal = useCallback((prod: Product, triggerEl: HTMLElement) => {
+    setProductToEdit(prod);
+    activeTriggerRef.current = triggerEl;
+    setIsModalOpen(true);
+  }, []);
+
+  // Đóng modal
+  const handleCloseModal = useCallback(() => {
+    setIsModalOpen(false);
+    setProductToEdit(null);
+  }, []);
+
+  // Xử lý sau khi lưu sản phẩm thành công
+  const handleSaveSuccess = useCallback(
+    (savedProduct: Product, isEdit: boolean) => {
+      // 1. Cập nhật state danh sách sản phẩm
+      if (isEdit) {
+        setProducts((prev) =>
+          prev.map((p) => (p.id === savedProduct.id ? savedProduct : p))
+        );
+      } else {
+        setProducts((prev) => [savedProduct, ...prev]);
+      }
+
+      // 2. Kiểm tra xem sản phẩm có bị ẩn bởi bộ lọc hoặc từ khóa tìm kiếm hiện tại không
+      const rawSearch = searchTerm.trim();
+      const normalizedQuery = removeVietnameseTones(rawSearch);
+      const matchesCategory =
+        selectedCategory === 'ALL' || savedProduct.category === selectedCategory;
+      const normalizedName = removeVietnameseTones(savedProduct.name);
+      const matchesSearch =
+        !rawSearch ||
+        normalizedName.includes(normalizedQuery) ||
+        savedProduct.code.toLowerCase().includes(rawSearch.toLowerCase()) ||
+        Boolean(savedProduct.barcode && savedProduct.barcode.includes(rawSearch));
+
+      const isVisibleInList = matchesCategory && matchesSearch;
+
+      if (!isVisibleInList) {
+        showToast({
+          text: `Đã ${isEdit ? 'cập nhật' : 'thêm'} "${savedProduct.name}" thành công, nhưng sản phẩm đang bị ẩn bởi bộ lọc hiện tại.`,
+          type: 'info',
+          actionLabel: 'Xóa bộ lọc để xem',
+          onAction: () => {
+            setSearchTerm('');
+            setSelectedCategory('ALL');
+            setToast(null);
+          },
+        });
+      } else {
+        showToast({
+          text: `Đã ${isEdit ? 'cập nhật' : 'thêm'} "${savedProduct.name}" thành công.`,
+          type: 'success',
+        });
+      }
+    },
+    [searchTerm, selectedCategory, showToast]
+  );
 
   // Danh sách các danh mục duy nhất từ sản phẩm thực tế
   const categories = useMemo(() => {
@@ -225,6 +353,9 @@ export function App() {
     setSelectedCategory('ALL');
   }, []);
 
+  // Quyền chỉnh sửa của người dùng
+  const canEdit = Boolean(member?.is_active && member?.can_edit);
+
   // MÀN HÌNH 1: Thiếu cấu hình Supabase
   if (!isSupabaseConfigured) {
     return (
@@ -259,8 +390,8 @@ export function App() {
     return <Login />;
   }
 
-  // MÀN HÌNH 4: Đang kiểm tra quyền thành viên gia đình
-  if (isMemberLoading) {
+  // MÀN HÌNH 4: Đang kiểm tra quyền thành viên gia đình (chỉ hiện khi chưa có thông tin member)
+  if (isMemberLoading && !member) {
     return (
       <div className="status-screen-container">
         <div className="status-screen-card">
@@ -271,8 +402,8 @@ export function App() {
     );
   }
 
-  // MÀN HÌNH 5: Lỗi kết nối khi kiểm tra thành viên
-  if (memberError) {
+  // MÀN HÌNH 5: Lỗi kết nối khi kiểm tra thành viên (chỉ hiện khi chưa có thông tin member)
+  if (memberError && !member) {
     return (
       <div className="status-screen-container">
         <div className="status-screen-card error-card">
@@ -332,19 +463,68 @@ export function App() {
           member={member}
           onSignOut={handleSignOut}
           isSigningOut={isSigningOut}
+          onOpenAddModal={handleOpenAddModal}
+          addBtnRef={addBtnRef}
         />
 
+        {/* Thông báo lỗi khi đăng xuất thất bại */}
+        {signOutError && (
+          <div className="app-alert app-alert-danger" role="alert">
+            <span>{signOutError}</span>
+            <button
+              type="button"
+              className="btn-alert-action"
+              onClick={handleSignOut}
+              disabled={isSigningOut}
+            >
+              Thử lại
+            </button>
+            <button
+              type="button"
+              className="btn-alert-close"
+              onClick={() => setSignOutError(null)}
+              aria-label="Đóng thông báo"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {/* Thông báo Toast sau khi lưu */}
+        {toast && (
+          <div className={`app-toast toast-${toast.type}`} role="status" aria-live="polite">
+            <span className="toast-text">{toast.text}</span>
+            {toast.actionLabel && toast.onAction && (
+              <button
+                type="button"
+                className="toast-action-btn"
+                onClick={toast.onAction}
+              >
+                {toast.actionLabel}
+              </button>
+            )}
+            <button
+              type="button"
+              className="toast-close-btn"
+              onClick={() => setToast(null)}
+              aria-label="Đóng thông báo"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         <main className="app-main">
-          {/* Trạng thái đang tải sản phẩm */}
-          {isProductsLoading && (
+          {/* Trạng thái đang tải sản phẩm (chỉ hiện panel to khi danh sách đang rỗng) */}
+          {isProductsLoading && products.length === 0 && (
             <div className="state-panel loading-panel">
               <div className="loading-spinner small" aria-hidden="true"></div>
               <span>Đang tải danh sách hàng hóa từ Supabase...</span>
             </div>
           )}
 
-          {/* Trạng thái lỗi tải sản phẩm */}
-          {productsError && (
+          {/* Trạng thái lỗi tải sản phẩm (chỉ chặn khi danh sách rỗng) */}
+          {productsError && products.length === 0 && (
             <div className="state-panel error-panel">
               <p>{productsError}</p>
               <button type="button" className="btn-retry" onClick={handleRetry}>
@@ -353,8 +533,8 @@ export function App() {
             </div>
           )}
 
-          {/* Khi không có lỗi tải và đã hoàn tất load */}
-          {!isProductsLoading && !productsError && (
+          {/* Khi đã có sản phẩm hoặc khi hoàn tất tải mà không có lỗi */}
+          {(products.length > 0 || (!isProductsLoading && !productsError)) && (
             <>
               {/* Chỉ hiển thị thanh tìm kiếm & lọc nếu cơ sở dữ liệu đã có ít nhất 1 sản phẩm */}
               {products.length > 0 && (
@@ -374,6 +554,9 @@ export function App() {
                 totalInDatabase={products.length}
                 onResetFilters={handleResetFilters}
                 hasFiltersApplied={hasFiltersApplied}
+                canEdit={canEdit}
+                onEdit={handleOpenEditModal}
+                onOpenAddModal={handleOpenAddModal}
               />
             </>
           )}
@@ -383,6 +566,16 @@ export function App() {
           <p>Family Inventory • Ứng dụng nội bộ gia đình</p>
         </footer>
       </div>
+
+      {/* Modal Thêm / Chỉnh sửa sản phẩm */}
+      <ProductFormModal
+        isOpen={isModalOpen}
+        productToEdit={productToEdit}
+        existingCategories={categories}
+        onClose={handleCloseModal}
+        onSaveSuccess={handleSaveSuccess}
+        triggerElementRef={activeTriggerRef}
+      />
     </div>
   );
 }

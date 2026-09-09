@@ -6,6 +6,9 @@ interface ProductListProps {
   totalInDatabase: number;
   onResetFilters: () => void;
   hasFiltersApplied: boolean;
+  canEdit?: boolean;
+  onEdit?: (product: Product, triggerEl: HTMLElement) => void;
+  onOpenAddModal?: () => void;
 }
 
 export function ProductList({
@@ -13,6 +16,9 @@ export function ProductList({
   totalInDatabase,
   onResetFilters,
   hasFiltersApplied,
+  canEdit,
+  onEdit,
+  onOpenAddModal,
 }: ProductListProps) {
   // Trường hợp cơ sở dữ liệu hoàn toàn chưa có sản phẩm nào
   if (totalInDatabase === 0) {
@@ -39,6 +45,15 @@ export function ProductList({
         <p className="empty-description">
           Cơ sở dữ liệu kho hàng gia đình hiện chưa có mặt hàng nào. Các sản phẩm được tạo trong hệ thống sẽ xuất hiện tại đây.
         </p>
+        {canEdit && onOpenAddModal && (
+          <button
+            type="button"
+            className="btn-primary-action"
+            onClick={onOpenAddModal}
+          >
+            <span aria-hidden="true">＋</span> Thêm sản phẩm đầu tiên
+          </button>
+        )}
       </section>
     );
   }
@@ -84,7 +99,12 @@ export function ProductList({
   return (
     <div className="product-grid" role="region" aria-label="Danh sách sản phẩm">
       {products.map((product) => (
-        <ProductCard key={product.id} product={product} />
+        <ProductCard
+          key={product.id}
+          product={product}
+          canEdit={canEdit}
+          onEdit={onEdit}
+        />
       ))}
     </div>
   );

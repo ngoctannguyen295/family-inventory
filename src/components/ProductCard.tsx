@@ -3,13 +3,16 @@ import { formatCurrency } from '../utils/formatters';
 
 interface ProductCardProps {
   product: Product;
+  canEdit?: boolean;
+  onEdit?: (product: Product, triggerEl: HTMLElement) => void;
 }
 
-export function ProductCard({ product }: ProductCardProps) {
+export function ProductCard({ product, canEdit, onEdit }: ProductCardProps) {
   const isOutOfStock = product.stock <= 0;
-  const imageSource = product.imageUrl && product.imageUrl.trim() !== ''
-    ? product.imageUrl
-    : '/products/default-placeholder.svg';
+  const imageSource =
+    product.imageUrl && product.imageUrl.trim() !== ''
+      ? product.imageUrl
+      : '/products/default-placeholder.svg';
 
   return (
     <article className={`product-card ${isOutOfStock ? 'out-of-stock-card' : ''}`}>
@@ -77,6 +80,34 @@ export function ProductCard({ product }: ProductCardProps) {
             )}
           </span>
         </div>
+
+        {/* Nút Chỉnh sửa chỉ hiển thị khi người dùng có quyền can_edit */}
+        {canEdit && onEdit && (
+          <div className="product-card-actions">
+            <button
+              type="button"
+              className="btn-card-edit"
+              onClick={(e) => onEdit(product, e.currentTarget)}
+              aria-label={`Chỉnh sửa ${product.name}`}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+              </svg>
+              Chỉnh sửa
+            </button>
+          </div>
+        )}
       </div>
     </article>
   );
