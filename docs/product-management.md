@@ -51,8 +51,13 @@ Form dùng chung cho cả Thêm và Sửa sản phẩm thực hiện kiểm tra 
    - Toàn bộ dữ liệu đang nhập trên form được **giữ nguyên**, không bị xóa mất để người dùng dễ dàng chỉnh sửa lại.
 
 6. **Ảnh đại diện (`image_url`)**:
-   - Chưa tích hợp tính năng tải ảnh; sản phẩm mới tạo mặc định có `image_url = null` và hiển thị ảnh vector placeholder nội bộ (`/products/default-placeholder.svg`).
-   - Khi chỉnh sửa sản phẩm, trường `image_url` hiện có được **giữ nguyên vẹn**.
+   - Trường tùy chọn (không bắt buộc).
+   - Chấp nhận các định dạng ảnh: JPEG, PNG, WebP với dung lượng tối đa **5 MB**.
+   - Kiểm tra định dạng: Bắt lỗi nếu là HEIC/HEIF hoặc loại không hỗ trợ, yêu cầu người dùng chuyển đổi trước khi tải lên (không tự ý đổi đuôi file).
+   - Xem trước ảnh bằng `object URL`, tự động thu hồi khi đổi ảnh, bấm bỏ ảnh hoặc đóng form.
+   - Nút **"Bỏ ảnh vừa chọn"**: Cho phép người dùng hủy chọn để quay lại ảnh ban đầu (ảnh cũ hoặc không có ảnh).
+   - Lưu trữ: Cột `products.image_url` chỉ lưu **đường dẫn tương đối trong bucket** (`<user-id>/<uuid>.<ext>`), không lưu blob URL hay signed URL có thời hạn.
+   - Hiển thị: Tải Blob từ private bucket qua SDK `supabase.storage.from('product-images').download(path)` và cache trong bộ nhớ trình duyệt, có placeholder dự phòng khi chưa có ảnh hoặc tải lỗi.
 
 ---
 
@@ -110,3 +115,50 @@ Sau khi đăng nhập bằng tài khoản có quyền `can_edit = true`, hãy th
 ### Kịch bản 7: Kiểm thử điều hướng bàn phím & Tiếp cận (Accessibility)
 1. Nhấn nút "+ Thêm sản phẩm": Con trỏ bàn phím (focus) tự động nhảy vào ô "Mã hàng".
 2. Nhấn phím `Escape`: Cửa sổ modal lập tức đóng lại, và focus tự động quay trở về nút "+ Thêm sản phẩm".
+
+---
+
+## 4. Kịch bản Kiểm thử Tính năng Ảnh Sản phẩm (Supabase Storage)
+
+> ⚠️ **Trạng thái:** *Mã nguồn đã hoàn tất và vượt qua toàn bộ lint/build, nhưng chưa kiểm thử thực tế với mạng thật trên bucket Supabase Storage.*
+
+### Kịch bản 8: Chọn ảnh hợp lệ và xem trước (Preview)
+1. Mở form "+ Thêm sản phẩm".
+2. Bấm nút **"Chọn ảnh từ máy"** và chọn một file ảnh hợp lệ (JPG, PNG hoặc WebP, dung lượng dưới 5 MB).
+3. **Kết quả**:
+   - Khung thumbnail xem trước hiển thị ngay lập tức hình ảnh vừa chọn.
+   - Hiển thị tên file và dung lượng (KB).
+   - Nút chọn đổi thành **"Đổi ảnh khác"** và xuất hiện thêm nút **"✕ Bỏ ảnh vừa chọn"**.
+
+### Kịch bản 9: Từ chối ảnh vượt dung lượng và định dạng không hỗ trợ (HEIC/HEIF)
+1. Thử chọn một file ảnh có dung lượng lớn hơn 5 MB:
+   - **Kết quả**: Báo lỗi đỏ *"Dung lượng file ảnh (... MB) vượt quá giới hạn tối đa cho phép là 5 MB."*, không tạo preview và reset input file.
+2. Thử chọn một file ảnh có đuôi `.heic` hoặc `.heif` (ảnh từ iPhone/iPad):
+   - **Kết quả**: Báo lỗi đỏ *"Định dạng ảnh HEIC/HEIF chưa được hỗ trợ trực tiếp trên trình duyệt. Vui lòng chuyển đổi ảnh sang định dạng JPEG, PNG hoặc WebP trước khi tải lên (không tự ý đổi đuôi file)."*.
+
+### Kịch bản 10: Hủy ảnh vừa chọn (Nút "Bỏ ảnh vừa chọn")
+1. Chọn một file ảnh để xem trước.
+2. Bấm nút **"✕ Bỏ ảnh vừa chọn"**.
+3. **Kết quả**: Vùng xem trước quay về ảnh placeholder mặc định, input file được làm sạch, object URL xem trước được thu hồi khỏi bộ nhớ.
+
+### Kịch bản 11: Quy trình Tải ảnh lên và Lưu sản phẩm mới
+1. Điền đầy đủ các trường thông tin sản phẩm và chọn 1 ảnh hợp lệ.
+2. Bấm nút **"Thêm sản phẩm"**.
+3. **Kết quả**:
+   - Nút chuyển sang trạng thái: *"Đang tải ảnh lên..."* ➔ *"Đang lưu sản phẩm..."*.
+   - Ảnh được tải lên Storage tại đường dẫn `<user-id>/<random-uuid>.<ext>`.
+   - Sản phẩm được lưu vào bảng `products` với cột `image_url` là đường dẫn tương đối vừa tạo.
+   - Thẻ sản phẩm mới trên màn hình chính hiển thị đúng hình ảnh vừa tải lên từ bucket riêng tư.
+
+### Kịch bản 12: Chỉnh sửa sản phẩm có ảnh (Giữ nguyên hoặc Thay mới)
+1. Bấm **"Chỉnh sửa"** trên thẻ sản phẩm đã có ảnh:
+   - Khung xem trước hiển thị ảnh đang lưu của sản phẩm đó.
+   - Dưới có dòng chữ *"Để nguyên nếu muốn giữ ảnh cũ"*.
+2. **Trường hợp A (Giữ ảnh cũ)**: Chỉ sửa giá bán hoặc tồn kho, không chọn ảnh mới ➔ Bấm Lưu ➔ Sản phẩm cập nhật thành công và vẫn giữ nguyên ảnh cũ.
+3. **Trường hợp B (Thay ảnh mới)**: Bấm **"Thay ảnh mới"**, chọn file ảnh khác ➔ Khung xem trước chuyển sang ảnh mới ➔ Bấm Lưu ➔ Sản phẩm cập nhật sang ảnh mới.
+
+### Kịch bản 13: Hiệu năng bộ nhớ đệm (In-Memory Image Cache)
+1. Khi danh sách đã tải xong các hình ảnh, thử gõ từ khóa vào ô tìm kiếm hoặc chuyển đổi bộ lọc danh mục.
+2. **Kết quả**: Các thẻ sản phẩm lọc tức thì mà **không bị tải lại ảnh từ máy chủ hay nhấp nháy trắng** nhờ cơ chế In-Memory Object URL Cache.
+3. Đăng xuất khỏi tài khoản: Toàn bộ Object URL được tự động thu hồi (`URL.revokeObjectURL`) và dọn dẹp sạch sẽ khỏi RAM trình duyệt.
+

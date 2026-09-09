@@ -10,6 +10,7 @@ import { Login } from './components/Login';
 import { SearchAndFilter } from './components/SearchAndFilter';
 import { ProductList } from './components/ProductList';
 import { ProductFormModal } from './components/ProductFormModal';
+import { clearProductImageCache } from './services/storageService';
 import './App.css';
 
 interface ToastNotification {
@@ -85,7 +86,8 @@ export function App() {
       setIsAuthChecking(false);
 
       if (!currentSession) {
-        // Đăng xuất hoặc đổi tài khoản: đóng modal và xóa toàn bộ dữ liệu
+        // Đăng xuất hoặc đổi tài khoản: đóng modal và xóa toàn bộ dữ liệu, thu hồi cache ảnh
+        clearProductImageCache();
         setSession(null);
         setIsModalOpen(false);
         setProductToEdit(null);
@@ -101,6 +103,11 @@ export function App() {
       }
 
       setSession((prev) => {
+        // Nếu đổi sang tài khoản người dùng khác, dọn dẹp cache ảnh của tài khoản cũ
+        if (prev?.user?.id && prev.user.id !== currentSession.user.id) {
+          clearProductImageCache();
+        }
+
         // Nếu user id và token không đổi, giữ nguyên reference để tránh trigger effect thừa
         if (
           prev?.user?.id === currentSession.user.id &&
@@ -115,6 +122,7 @@ export function App() {
     return () => {
       isMounted = false;
       subscription.unsubscribe();
+      clearProductImageCache();
       if (toastTimeoutRef.current) {
         window.clearTimeout(toastTimeoutRef.current);
       }
@@ -217,7 +225,8 @@ export function App() {
         return;
       }
 
-      // Đăng xuất thành công: xóa ngay state
+      // Đăng xuất thành công: xóa ngay state và dọn dẹp cache ảnh
+      clearProductImageCache();
       setMember(null);
       setProducts([]);
       setIsUnauthorized(false);
@@ -572,6 +581,7 @@ export function App() {
         isOpen={isModalOpen}
         productToEdit={productToEdit}
         existingCategories={categories}
+        userId={userId}
         onClose={handleCloseModal}
         onSaveSuccess={handleSaveSuccess}
         triggerElementRef={activeTriggerRef}

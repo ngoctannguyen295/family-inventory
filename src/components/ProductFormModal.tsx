@@ -1,16 +1,20 @@
 import { useState, useEffect, useRef, type FormEvent, type KeyboardEvent } from 'react';
 import type { Product } from '../types/product';
+import { supabase } from '../lib/supabase';
 import {
   createProduct,
   updateProduct,
   type CreateProductInput,
   type UpdateProductInput,
 } from '../services/productService';
+import { validateImageFile, uploadProductImage } from '../services/storageService';
+import { ProductImage } from './ProductImage';
 
 interface ProductFormModalProps {
   isOpen: boolean;
   productToEdit?: Product | null;
   existingCategories: string[];
+  userId?: string | null;
   onClose: () => void;
   onSaveSuccess: (savedProduct: Product, isEdit: boolean) => void;
   triggerElementRef?: React.RefObject<HTMLElement | null>;
@@ -22,6 +26,7 @@ const COMMON_UNITS = ['gói', 'chai', 'lon', 'hộp', 'kg', 'túi', 'lọ', 'th�
 interface FormDialogProps {
   productToEdit?: Product | null;
   existingCategories: string[];
+  userId?: string | null;
   onClose: () => void;
   onSaveSuccess: (savedProduct: Product, isEdit: boolean) => void;
   triggerElementRef?: React.RefObject<HTMLElement | null>;
@@ -149,6 +154,27 @@ function ProductFormDialog({
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  // Trạng thái xử lý ảnh sản phẩm
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [uploadStepText, setUploadStepText] = useState<string | null>(null);
+  const uploadedStoragePathRef = useRef<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Thu hồi Object URL của preview khi previewUrl thay đổi hoặc unmount
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        try {
+          URL.revokeObjectURL(previewUrl);
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+  }, [previewUrl]);
+
   // Tham chiếu focus
   const modalRef = useRef<HTMLDivElement>(null);
   const firstInputRef = useRef<HTMLInputElement>(null);
@@ -158,9 +184,49 @@ function ProductFormDialog({
     firstInputRef.current?.focus();
   }, []);
 
+  // Xử lý khi người dùng chọn file ảnh từ máy
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setImageError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validation = await validateImageFile(file);
+    if (!validation.isValid) {
+      setImageError(validation.error);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+
+    const newUrl = URL.createObjectURL(file);
+    setSelectedFile(file);
+    setPreviewUrl(newUrl);
+    uploadedStoragePathRef.current = null;
+  };
+
+  // Nút Bỏ ảnh vừa chọn: quay về ảnh ban đầu
+  const handleClearSelectedFile = () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    setImageError(null);
+    uploadedStoragePathRef.current = null;
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   // Hoàn trả focus về nút mở khi modal đóng
   const handleClose = () => {
     if (isSubmitting) return;
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
     onClose();
     if (triggerElementRef?.current) {
       triggerElementRef.current.focus();
@@ -176,6 +242,9 @@ function ProductFormDialog({
         /* ignore */
       }
     }
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
     handleClose();
   };
 
@@ -186,7 +255,8 @@ function ProductFormDialog({
         code.trim() !== '' ||
         name.trim() !== '' ||
         purchasePrice.trim() !== '' ||
-        salePrice.trim() !== '';
+        salePrice.trim() !== '' ||
+        selectedFile !== null;
 
       if (!hasEnteredData) {
         handleClose();
@@ -311,8 +381,46 @@ function ProductFormDialog({
 
     setFieldErrors({});
     setIsSubmitting(true);
+    setUploadStepText(null);
 
     try {
+      // 1. Kiểm tra phiên đăng nhập người dùng trước khi upload và ghi dữ liệu
+      if (!supabase) {
+        setFormError('Chưa cấu hình kết nối Supabase.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      const { data: authData } = await supabase.auth.getSession();
+      const currentSession = authData.session;
+      if (!currentSession || !currentSession.user) {
+        setFormError('Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.');
+        setIsSubmitting(false);
+        return;
+      }
+      const activeUserId = currentSession.user.id;
+
+      // 2. Upload ảnh nếu có file mới được chọn và chưa upload thành công ở lần thử trước
+      if (selectedFile) {
+        if (!uploadedStoragePathRef.current) {
+          setUploadStepText('Đang tải ảnh lên...');
+          const uploadRes = await uploadProductImage(selectedFile, activeUserId);
+          if (uploadRes.error || !uploadRes.path) {
+            setFormError(uploadRes.error || 'Tải ảnh lên thất bại. Vui lòng thử lại.');
+            setIsSubmitting(false);
+            setUploadStepText(null);
+            return; // Dừng lại, không lưu sản phẩm vào DB
+          }
+          uploadedStoragePathRef.current = uploadRes.path;
+        }
+      }
+
+      // Xác định đường dẫn ảnh lưu trữ trong bucket (chỉ lưu storage path, không lưu URL hiển thị)
+      const finalImagePath =
+        uploadedStoragePathRef.current ?? (isEdit && productToEdit ? productToEdit.imageUrl : null);
+
+      setUploadStepText('Đang lưu sản phẩm...');
+
       if (isEdit && productToEdit) {
         // Cập nhật sản phẩm hiện có
         const updatePayload: UpdateProductInput = {
@@ -325,7 +433,7 @@ function ProductFormDialog({
           salePrice: validSale.num,
           stock: validStock.num,
           notes: notes.trim(),
-          imageUrl: productToEdit.imageUrl, // Giữ nguyên ảnh hiện có
+          imageUrl: finalImagePath,
         };
 
         const res = await updateProduct(productToEdit.id, updatePayload);
@@ -335,9 +443,14 @@ function ProductFormDialog({
             setFieldErrors({ [res.duplicateField]: res.error || 'Dữ liệu bị trùng lặp.' });
           }
           setIsSubmitting(false);
+          setUploadStepText(null);
           return;
         }
 
+        if (previewUrl) {
+          URL.revokeObjectURL(previewUrl);
+        }
+        uploadedStoragePathRef.current = null;
         onSaveSuccess(res.data, true);
         handleClose();
       } else {
@@ -352,6 +465,7 @@ function ProductFormDialog({
           salePrice: validSale.num,
           stock: validStock.num,
           notes: notes.trim(),
+          imageUrl: finalImagePath,
         };
 
         const res = await createProduct(createPayload);
@@ -361,9 +475,14 @@ function ProductFormDialog({
             setFieldErrors({ [res.duplicateField]: res.error || 'Dữ liệu bị trùng lặp.' });
           }
           setIsSubmitting(false);
+          setUploadStepText(null);
           return;
         }
 
+        if (previewUrl) {
+          URL.revokeObjectURL(previewUrl);
+        }
+        uploadedStoragePathRef.current = null;
         onSaveSuccess(res.data, false);
         try {
           sessionStorage.removeItem(DRAFT_KEY);
@@ -376,6 +495,7 @@ function ProductFormDialog({
       setFormError('Đã xảy ra lỗi không xác định khi lưu. Dữ liệu form được giữ nguyên để bạn thử lại.');
     } finally {
       setIsSubmitting(false);
+      setUploadStepText(null);
     }
   };
 
@@ -465,6 +585,102 @@ function ProductFormDialog({
         )}
 
         <form className="modal-form" onSubmit={handleSubmit} noValidate>
+          {/* Ảnh sản phẩm */}
+          <div className="form-group image-upload-group">
+            <label className="form-label">
+              Ảnh sản phẩm (không bắt buộc)
+            </label>
+            <div className="image-upload-box">
+              <div className="image-preview-container">
+                {previewUrl ? (
+                  <img
+                    src={previewUrl}
+                    alt="Xem trước ảnh sản phẩm mới"
+                    className="image-preview-thumbnail"
+                  />
+                ) : isEdit && productToEdit?.imageUrl ? (
+                  <ProductImage
+                    storagePath={productToEdit.imageUrl}
+                    alt={productToEdit.name}
+                    className="image-preview-thumbnail"
+                  />
+                ) : (
+                  <img
+                    src="/products/default-placeholder.svg"
+                    alt="Chưa có ảnh sản phẩm"
+                    className="image-preview-thumbnail"
+                  />
+                )}
+              </div>
+
+              <div className="image-upload-content">
+                <input
+                  ref={fileInputRef}
+                  id="product-image-file"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handleFileChange}
+                  disabled={isSubmitting}
+                  style={{ display: 'none' }}
+                />
+
+                <div className="image-upload-buttons">
+                  <button
+                    type="button"
+                    className="btn-upload-trigger"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isSubmitting}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="15"
+                      height="15"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                      <circle cx="9" cy="9" r="2" />
+                      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                    </svg>
+                    {selectedFile
+                      ? 'Đổi ảnh khác'
+                      : isEdit && productToEdit?.imageUrl
+                      ? 'Thay ảnh mới'
+                      : 'Chọn ảnh từ máy'}
+                  </button>
+
+                  {selectedFile && (
+                    <button
+                      type="button"
+                      className="btn-clear-image"
+                      onClick={handleClearSelectedFile}
+                      disabled={isSubmitting}
+                    >
+                      ✕ Bỏ ảnh vừa chọn
+                    </button>
+                  )}
+                </div>
+
+                {selectedFile ? (
+                  <span className="image-file-details" title={selectedFile.name}>
+                    Đã chọn: <strong>{selectedFile.name}</strong> ({(selectedFile.size / 1024).toFixed(0)} KB)
+                  </span>
+                ) : (
+                  <span className="image-format-hint">
+                    Hỗ trợ JPG, PNG, WebP (tối đa 5 MB). {isEdit && productToEdit?.imageUrl ? 'Để nguyên nếu muốn giữ ảnh cũ.' : ''}
+                  </span>
+                )}
+
+                {imageError && <span className="field-error-text">{imageError}</span>}
+              </div>
+            </div>
+          </div>
+
           <div className="form-grid-2">
             {/* Mã hàng */}
             <div className="form-group">
@@ -671,7 +887,7 @@ function ProductFormDialog({
               {isSubmitting ? (
                 <span className="btn-loading-state">
                   <span className="spinner-dot" aria-hidden="true"></span>
-                  Đang lưu...
+                  {uploadStepText || 'Đang lưu...'}
                 </span>
               ) : isEdit ? (
                 'Lưu thay đổi'

@@ -1,5 +1,6 @@
 import type { Product } from '../types/product';
 import { formatCurrency } from '../utils/formatters';
+import { ProductImage } from './ProductImage';
 
 interface ProductCardProps {
   product: Product;
@@ -9,23 +10,15 @@ interface ProductCardProps {
 
 export function ProductCard({ product, canEdit, onEdit }: ProductCardProps) {
   const isOutOfStock = product.stock <= 0;
-  const imageSource =
-    product.imageUrl && product.imageUrl.trim() !== ''
-      ? product.imageUrl
-      : '/products/default-placeholder.svg';
 
   return (
     <article className={`product-card ${isOutOfStock ? 'out-of-stock-card' : ''}`}>
       <div className="product-image-container">
-        <img
-          src={imageSource}
+        <ProductImage
+          storagePath={product.imageUrl}
           alt={product.name}
           className="product-image"
           loading="lazy"
-          onError={(e) => {
-            // Nếu ảnh lỗi mạng, đổi sang ảnh placeholder nội bộ
-            (e.currentTarget as HTMLImageElement).src = '/products/default-placeholder.svg';
-          }}
         />
         <span className="product-category-tag">{product.category}</span>
         {isOutOfStock && (

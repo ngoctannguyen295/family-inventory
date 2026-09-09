@@ -104,3 +104,48 @@ Sau khi chạy migration và tạo tài khoản thử nghiệm trên Authenticat
 5. **Kiểm tra thành viên bị khóa (`is_active = false`)**:
    - Cập nhật `is_active = false`.
    - Thử đọc danh sách `products` ➔ Lập tức trả về rỗng `[]`, không đọc được bất kỳ sản phẩm nào.
+
+---
+
+## 5. Quản lý Lưu trữ Ảnh Sản phẩm (Supabase Storage)
+
+Migration: [supabase/migrations/20260910000100_storage_product_images.sql](file:///c:/Users/Ngoc%20Tan/Projects/family-inventory/supabase/migrations/20260910000100_storage_product_images.sql)
+
+> ⚠️ **Trạng thái kiểm thử:** *Chưa kiểm thử thực tế trên hệ thống đang chạy (Pending live verification).* Migration mới được khởi tạo và đang chờ áp dụng trên Supabase Dashboard / SQL Editor.
+
+### 5.1 Cấu hình Bucket `product-images`
+- **Chế độ truy cập:** Private (`public = false`). Mọi yêu cầu truy cập xem ảnh đều phải thông qua xác thực (Signed URL hoặc request có header xác thực thành viên).
+- **Dung lượng tối đa mỗi file:** 5 MB (`5,242,880` bytes).
+- **Định dạng file cho phép:** `image/jpeg`, `image/png`, `image/webp`.
+
+### 5.2 Ma trận Quyền trên `storage.objects`
+
+| Thao tác Storage | Đối tượng được phép | Điều kiện kiểm tra RLS | Ghi chú |
+|---|---|---|---|
+| **SELECT (Xem/Tải ảnh)** | Thành viên gia đình đang hoạt động (`is_active = true`) | `bucket_id = 'product-images'` VÀ tồn tại bản ghi trong `public.family_members` có `user_id = auth.uid()` và `is_active = true` | Thành viên được xem toàn bộ ảnh trong bucket do bất kỳ thành viên nào tải lên |
+| **INSERT (Tải ảnh lên)** | Thành viên có quyền chỉnh sửa (`is_active = true, can_edit = true`) | `bucket_id = 'product-images'` VÀ `can_edit = true` VÀ `(storage.foldername(name))[1] = auth.uid()::text` | Thư mục đầu tiên trong đường dẫn bắt buộc phải là UID của người đang tải lên |
+| **UPDATE (Ghi đè file)** | ❌ Không cấp | Không có policy UPDATE | Tránh rủi ro ghi đè file ngoài ý muốn |
+| **DELETE (Xóa file)** | ❌ Không cấp | Không có policy DELETE | Không cho phép xóa trực tiếp từ client ở bước này |
+
+### 5.3 Quy ước Đường dẫn File (Storage Path Convention)
+Đường dẫn đối tượng trong bucket `product-images` tuân thủ nghiêm ngặt quy tắc phân cấp theo UID thành viên:
+
+```text
+<user-id>/<random-uuid>.<extension>
+```
+
+Ví dụ:
+`c9f30b91-49b8-4c8d-8153-f72535798993/7b5d1a2c-e549-4b87-9d7a-115f5c88e04b.webp`
+
+- `<user-id>`: Chuỗi UUID của người dùng đang đăng nhập (`auth.uid()`). Điều này đảm bảo tính bảo mật khi tải lên (kiểm tra bởi RLS `storage.foldername(name)[1]`).
+- `<random-uuid>`: Chuỗi UUID ngẫu nhiên v4 cho mỗi lần upload, giúp tên file không trùng lặp và không lộ tên file gốc từ máy người dùng.
+- `<extension>`: Đuôi file hợp lệ (`jpg`, `jpeg`, `png`, `webp`).
+
+### 5.4 Quy tắc Lưu trữ trong Bảng `public.products`
+- Cột `image_url` trong bảng `public.products` **chỉ lưu đường dẫn file tương đối trong bucket** (ví dụ: `c9f30b91-49b8.../7b5d1a2c...webp`), hoặc giá trị `NULL` nếu sản phẩm chưa có ảnh.
+- **Tuyệt đối không lưu Signed URL** vào cơ sở dữ liệu vì Signed URL luôn có thời hạn hết hạn (TTL). Khi giao diện cần hiển thị ảnh, client sẽ dùng Supabase SDK để tạo Signed URL ngắn hạn từ đường dẫn file đã lưu.
+
+### 5.5 Cơ chế Thay ảnh và Dọn dẹp File Rác (Orphaned Files)
+- **Khi thay đổi ảnh sản phẩm:** Ứng dụng sẽ tải file mới lên với UUID mới và tham số `upsert = false`. Sau khi tải lên thành công, client cập nhật trường `image_url` của sản phẩm sang đường dẫn mới.
+- **Dọn dẹp ảnh cũ:** File ảnh cũ vẫn sẽ nằm trong bucket và chưa tự động xóa ở bước này.
+- **File mồ côi (Orphaned files):** Trong trường hợp người dùng chọn tải ảnh lên nhưng sau đó hủy form lưu sản phẩm, file đó đã tồn tại trong bucket nhưng không gắn với sản phẩm nào. Một tiến trình dọn dẹp định kỳ (Storage cleanup cron job / Edge Function) sẽ được thiết kế ở các giai đoạn tiếp theo để quét và xóa các file mồ côi này.

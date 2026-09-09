@@ -13,6 +13,7 @@ export interface CreateProductInput {
   salePrice: number;
   stock: number;
   notes?: string;
+  imageUrl?: string | null;
 }
 
 export interface UpdateProductInput {
@@ -109,7 +110,7 @@ export async function createProduct(input: CreateProductInput): Promise<ServiceR
     name: input.name.trim(),
     category: input.category.trim(),
     unit: input.unit.trim(),
-    image_url: null, // Chưa hỗ trợ upload ảnh, mặc định null
+    image_url: input.imageUrl && input.imageUrl.trim() !== '' ? input.imageUrl.trim() : null,
     purchase_price: input.purchasePrice,
     sale_price: input.salePrice,
     stock: input.stock,
