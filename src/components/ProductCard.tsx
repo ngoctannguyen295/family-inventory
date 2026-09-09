@@ -7,15 +7,22 @@ interface ProductCardProps {
 
 export function ProductCard({ product }: ProductCardProps) {
   const isOutOfStock = product.stock <= 0;
+  const imageSource = product.imageUrl && product.imageUrl.trim() !== ''
+    ? product.imageUrl
+    : '/products/default-placeholder.svg';
 
   return (
     <article className={`product-card ${isOutOfStock ? 'out-of-stock-card' : ''}`}>
       <div className="product-image-container">
         <img
-          src={product.imageUrl}
+          src={imageSource}
           alt={product.name}
           className="product-image"
           loading="lazy"
+          onError={(e) => {
+            // Nếu ảnh lỗi mạng, đổi sang ảnh placeholder nội bộ
+            (e.currentTarget as HTMLImageElement).src = '/products/default-placeholder.svg';
+          }}
         />
         <span className="product-category-tag">{product.category}</span>
         {isOutOfStock && (
@@ -37,7 +44,11 @@ export function ProductCard({ product }: ProductCardProps) {
           </div>
           <div className="code-item">
             <span className="code-label">Mã vạch:</span>
-            <span className="barcode-value">{product.barcode}</span>
+            {product.barcode ? (
+              <span className="barcode-value">{product.barcode}</span>
+            ) : (
+              <span className="barcode-none">Chưa có</span>
+            )}
           </div>
         </div>
 

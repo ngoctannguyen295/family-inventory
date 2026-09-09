@@ -1,8 +1,13 @@
+import type { FamilyMember } from '../types/database';
+
 interface HeaderProps {
   totalCount: number;
+  member: FamilyMember | null;
+  onSignOut: () => void;
+  isSigningOut?: boolean;
 }
 
-export function Header({ totalCount }: HeaderProps) {
+export function Header({ totalCount, member, onSignOut, isSigningOut }: HeaderProps) {
   return (
     <header className="app-header">
       <div className="header-top">
@@ -10,7 +15,32 @@ export function Header({ totalCount }: HeaderProps) {
           <span className="brand-dot" aria-hidden="true"></span>
           Family Inventory
         </div>
-        <span className="demo-badge">Dữ liệu minh họa</span>
+
+        {member && (
+          <div className="user-profile-bar">
+            <div className="user-info-text">
+              <span className="user-display-name">{member.display_name}</span>
+              <span
+                className={`user-role-badge ${
+                  member.can_edit ? 'role-editor' : 'role-viewer'
+                }`}
+                title="Quyền thực sự do chính sách RLS tại máy chủ quản lý"
+              >
+                {member.can_edit ? 'Được chỉnh sửa' : 'Chỉ xem'}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="signout-button"
+              onClick={onSignOut}
+              disabled={isSigningOut}
+              aria-label="Đăng xuất khỏi ứng dụng"
+              title="Đăng xuất"
+            >
+              {isSigningOut ? 'Đang xuất...' : 'Đăng xuất'}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="header-main">

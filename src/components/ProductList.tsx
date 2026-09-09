@@ -3,11 +3,47 @@ import { ProductCard } from './ProductCard';
 
 interface ProductListProps {
   products: Product[];
+  totalInDatabase: number;
   onResetFilters: () => void;
   hasFiltersApplied: boolean;
 }
 
-export function ProductList({ products, onResetFilters, hasFiltersApplied }: ProductListProps) {
+export function ProductList({
+  products,
+  totalInDatabase,
+  onResetFilters,
+  hasFiltersApplied,
+}: ProductListProps) {
+  // Trường hợp cơ sở dữ liệu hoàn toàn chưa có sản phẩm nào
+  if (totalInDatabase === 0) {
+    return (
+      <section className="empty-state" aria-label="Chưa có sản phẩm">
+        <div className="empty-icon" aria-hidden="true">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="48"
+            height="48"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+          </svg>
+        </div>
+        <h3 className="empty-title">Chưa có sản phẩm</h3>
+        <p className="empty-description">
+          Cơ sở dữ liệu kho hàng gia đình hiện chưa có mặt hàng nào. Các sản phẩm được tạo trong hệ thống sẽ xuất hiện tại đây.
+        </p>
+      </section>
+    );
+  }
+
+  // Trường hợp có sản phẩm trong DB nhưng bộ lọc / tìm kiếm không khớp
   if (products.length === 0) {
     return (
       <section className="empty-state" aria-label="Không có kết quả">
