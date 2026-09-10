@@ -11,6 +11,7 @@ import { SearchAndFilter } from './components/SearchAndFilter';
 import { ProductList } from './components/ProductList';
 import { ProductFormModal } from './components/ProductFormModal';
 import { ProductHistoryModal } from './components/ProductHistoryModal';
+import { BarcodeScannerModal } from './components/BarcodeScannerModal';
 import { clearProductImageCache } from './services/storageService';
 import './App.css';
 
@@ -54,6 +55,10 @@ export function App() {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [selectedHistoryProduct, setSelectedHistoryProduct] = useState<Product | null>(null);
   const historyTriggerRef = useRef<HTMLElement | null>(null);
+
+  // 5.2 Quản lý modal Quét mã vạch
+  const [isBarcodeScannerOpen, setIsBarcodeScannerOpen] = useState(false);
+  const barcodeScannerTriggerRef = useRef<HTMLElement | null>(null);
 
   // 6. Thông báo Toast
   const [toast, setToast] = useState<ToastNotification | null>(null);
@@ -99,6 +104,7 @@ export function App() {
         setProductToEdit(null);
         setIsHistoryModalOpen(false);
         setSelectedHistoryProduct(null);
+        setIsBarcodeScannerOpen(false);
         setMember(null);
         setProducts([]);
         setIsUnauthorized(false);
@@ -226,6 +232,7 @@ export function App() {
     setProductToEdit(null);
     setIsHistoryModalOpen(false);
     setSelectedHistoryProduct(null);
+    setIsBarcodeScannerOpen(false);
 
     try {
       const { error } = await supabase.auth.signOut();
@@ -288,6 +295,23 @@ export function App() {
   const handleCloseHistoryModal = useCallback(() => {
     setIsHistoryModalOpen(false);
     setSelectedHistoryProduct(null);
+  }, []);
+
+  // Mở modal Quét mã vạch
+  const handleOpenBarcodeScanner = useCallback((triggerEl: HTMLElement) => {
+    barcodeScannerTriggerRef.current = triggerEl;
+    setIsBarcodeScannerOpen(true);
+  }, []);
+
+  // Đóng modal Quét mã vạch
+  const handleCloseBarcodeScanner = useCallback(() => {
+    setIsBarcodeScannerOpen(false);
+  }, []);
+
+  // Xử lý khi chọn sản phẩm từ kết quả quét mã vạch
+  const handleSelectProductFromBarcode = useCallback((scannedProduct: Product) => {
+    setSearchTerm(scannedProduct.barcode || scannedProduct.code);
+    setSelectedCategory('ALL');
   }, []);
 
   // Xử lý sau khi lưu sản phẩm thành công
@@ -578,6 +602,7 @@ export function App() {
                   categories={categories}
                   displayedCount={filteredProducts.length}
                   totalCount={products.length}
+                  onOpenBarcodeScanner={handleOpenBarcodeScanner}
                 />
               )}
 
@@ -589,6 +614,7 @@ export function App() {
                 canEdit={canEdit}
                 onEdit={handleOpenEditModal}
                 onViewHistory={handleOpenHistoryModal}
+                onOpenBarcodeScanner={handleOpenBarcodeScanner}
                 onOpenAddModal={handleOpenAddModal}
               />
             </>
@@ -618,6 +644,16 @@ export function App() {
           product={selectedHistoryProduct}
           onClose={handleCloseHistoryModal}
           triggerElementRef={historyTriggerRef}
+        />
+      )}
+
+      {/* Modal Quét mã vạch sản phẩm */}
+      {isBarcodeScannerOpen && (
+        <BarcodeScannerModal
+          isOpen={isBarcodeScannerOpen}
+          onClose={handleCloseBarcodeScanner}
+          onSelectProduct={handleSelectProductFromBarcode}
+          triggerElementRef={barcodeScannerTriggerRef}
         />
       )}
     </div>

@@ -196,3 +196,45 @@ export async function updateProduct(
     return { data: null, error: message };
   }
 }
+
+/**
+ * Tìm kiếm sản phẩm theo mã vạch khớp chính xác từ Supabase public.products
+ * Bảo toàn định dạng chuỗi, không ép kiểu số và giữ nguyên các số 0 ở đầu
+ */
+export async function findProductByBarcode(
+  rawBarcode: string
+): Promise<ServiceResult<Product>> {
+  if (!supabase) {
+    return { data: null, error: 'Chưa cấu hình kết nối Supabase.' };
+  }
+
+  const barcode = rawBarcode.trim();
+  if (!barcode) {
+    return { data: null, error: 'Mã vạch không được để trống.' };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('barcode', barcode)
+      .maybeSingle();
+
+    if (error) {
+      const parsed = parseSupabaseError(error);
+      return { data: null, error: parsed.message };
+    }
+
+    // Không tìm thấy sản phẩm trong cơ sở dữ liệu (data = null, error = null)
+    if (!data) {
+      return { data: null, error: null };
+    }
+
+    return { data: mapProductRow(data as ProductRow), error: null };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : 'Lỗi kết nối khi tìm sản phẩm theo mã vạch.';
+    return { data: null, error: message };
+  }
+}
+

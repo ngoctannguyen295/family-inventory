@@ -225,3 +225,88 @@ Hệ thống ghi nhận nhật ký tự động vào bảng `public.product_hist
 2. Khi đang mở modal lịch sử mà tài khoản bị đăng xuất hoặc hết hạn phiên:
    - **Kết quả**: Modal lịch sử tự động đóng ngay lập tức, dữ liệu trong modal được xóa để đảm bảo an toàn thông tin.
 
+---
+
+## 6. Hướng dẫn và Kịch bản Kiểm thử Quét Mã vạch (Barcode Scanner)
+
+Tính năng quét mã vạch hỗ trợ toàn bộ thành viên đang hoạt động (`is_active = true`), kể cả thành viên chỉ xem, tra cứu tức thì thông tin sản phẩm trong kho bằng 3 phương thức: **Camera**, **Chọn ảnh có mã vạch** và **Nhập mã thủ công**.
+
+### 6.1 Cơ chế kỹ thuật & Định dạng hỗ trợ
+- **Thư viện**: Sử dụng `html5-qrcode` (phiên bản `2.3.8`) được **lazy-load** độc lập qua dynamic import để tối ưu tốc độ tải trang ban đầu.
+- **Định dạng mã vạch hỗ trợ**: `EAN-13`, `EAN-8`, `UPC-A`, `UPC-E` và `CODE-128`.
+- **An toàn Camera**:
+  - Chỉ xin quyền truy cập khi người dùng bấm nút *"Bắt đầu quét bằng camera"*.
+  - Ưu tiên camera sau (`facingMode: "environment"`). Có bộ chọn đổi camera nếu thiết bị có từ 2 camera trở lên.
+  - Tự động dừng camera và giải phóng tài nguyên khi đóng modal, đổi tab, unmount hoặc đăng xuất.
+  - Xử lý race condition khi đóng modal lúc camera đang khởi động (`isStartingRef`).
+  - Bỏ qua lỗi per-frame, chỉ nhận diện và dừng camera khi đọc mã thành công 1 lần duy nhất.
+- **Xử lý Ảnh trên máy**:
+  - Quét mã từ ảnh (`scanFile`) hoàn toàn tại client (trình duyệt). Tuyệt đối **không tải ảnh quét lên Supabase Storage**.
+  - Giới hạn dung lượng 5 MB, định dạng JPEG, PNG, WebP.
+- **Tra cứu Cơ sở Dữ liệu**:
+  - Mã đọc được lưu dưới dạng chuỗi `string`, cắt khoảng trắng 2 đầu và **bảo toàn các số 0 ở đầu**.
+  - Truy vấn khớp chính xác trực tiếp vào bảng `public.products` (`barcode = cleanCode`), không bị giới hạn bởi bộ lọc danh mục hiện tại.
+
+---
+
+### 6.2 Các Kịch bản Kiểm thử Đề xuất
+
+#### Kịch bản 20: Mở modal quét mã vạch và chuyển đổi các chế độ
+1. Bấm nút **"Quét mã"** (icon Barcode) cạnh ô tìm kiếm hoặc nút *"Quét mã vạch tra cứu"* khi kho hàng đang trống.
+2. **Kết quả**:
+   - Modal mở lên với 3 tab: **"📷 Dùng camera"**, **"🖼️ Chọn ảnh có mã vạch"**, **"⌨️ Nhập mã thủ công"**.
+   - Tab Camera hiển thị khung ngắm cùng nút *"Bắt đầu quét bằng camera"*. Camera chưa tự ý bật khi người dùng chưa bấm nút.
+   - Chuyển lần lượt giữa 3 tab: giao diện chuyển đổi mượt mà, không bị xung đột camera.
+
+#### Kịch bản 21: Nhập mã thủ công tìm sản phẩm đã có
+1. Chọn tab **"Nhập mã thủ công"**.
+2. Nhập mã vạch của sản phẩm đã lưu (ví dụ: `8935001234567` hoặc mã hàng/mã vạch mẫu).
+3. Bấm **"Tìm sản phẩm"** (hoặc nhấn phím `Enter`):
+4. **Kết quả**:
+   - Hệ thống hiển thị thẻ sản phẩm chi tiết: ảnh đại diện (nếu có), tên sản phẩm, mã hàng, mã vạch, giá nhập, giá bán (`₫`), tồn kho kèm đơn vị tính.
+   - Có nút **"Xem trong danh sách"**: bấm vào sẽ đóng modal và lọc danh sách sản phẩm theo mã vừa tìm.
+   - Có nút **"Quét mã khác"**: bấm vào sẽ reset trạng thái để sẵn sàng quét lượt mới.
+
+#### Kịch bản 22: Tra cứu mã vạch chưa có trong danh mục kho
+1. Nhập một mã vạch bất kỳ chưa có trong kho (ví dụ: `8939999999999`).
+2. Bấm **"Tìm sản phẩm"**:
+3. **Kết quả**:
+   - Hiển thị thẻ thông báo thân thiện: *"Chưa có sản phẩm mang mã 8939999999999"* kèm chú thích *"Mã vạch này chưa được gán cho mặt hàng nào trong danh mục kho gia đình"*.
+   - Hệ thống **không tự ý tạo sản phẩm mới**.
+   - Có nút *"Quét lại hoặc nhập mã khác"* để người dùng tiếp tục thao tác.
+
+#### Kịch bản 23: Đọc mã từ ảnh có chứa mã vạch (File scan)
+1. Chuyển sang tab **"Chọn ảnh có mã vạch"**.
+2. Bấm **"Chọn ảnh có mã vạch"** và chọn một file ảnh chụp bao bì/mã vạch rõ nét (JPG, PNG, WebP dưới 5 MB).
+3. **Kết quả**:
+   - Trạng thái chuyển sang *"Đang quét mã từ ảnh..."*.
+   - Quét thành công: hệ thống trích xuất mã và tự động tra cứu sản phẩm trong kho.
+   - Nếu chọn file ảnh không chứa mã vạch rõ ràng: hệ thống báo lỗi *"Không tìm thấy mã vạch hợp lệ trong ảnh này. Vui lòng chọn ảnh chụp rõ nét, đủ ánh sáng hoặc nhập mã thủ công."*.
+   - Nếu chọn file vượt quá 5 MB: báo lỗi giới hạn dung lượng ngay lập tức.
+
+#### Kịch bản 24: Quét bằng camera trực tiếp
+1. Chuyển sang tab **"Dùng camera"** và bấm **"Bắt đầu quét bằng camera"**.
+2. Trình duyệt hiển thị hộp thoại xin cấp quyền camera:
+   - **Trường hợp từ chối quyền**: Modal báo lỗi đỏ *"Quyền truy cập camera bị từ chối. Vui lòng cho phép quyền truy cập camera trong cài đặt trình duyệt để tiếp tục."*.
+   - **Trường hợp cho phép quyền**: Khung ngắm camera mở lên, hiển thị khung căn chỉnh màu trắng và tia laser đỏ quét lên xuống.
+3. Đưa mã vạch của sản phẩm vào khung ngắm:
+   - Ngay khi nhận diện được mã, camera lập tức dừng, hệ thống chuyển sang màn hình hiển thị sản phẩm tìm thấy.
+
+#### Kịch bản 25: Đóng modal và xử lý vòng đời an toàn
+1. Khi camera đang mở, nhấn phím `Escape` hoặc nút `✕`:
+   - Modal đóng ngay lập tức, camera được tắt hoàn toàn (đèn báo webcam tắt).
+   - Tiêu điểm bàn phím (focus) tự động quay lại nút "Quét mã" cạnh ô tìm kiếm.
+2. Nếu đăng xuất trong lúc modal đang mở:
+   - Modal tự động đóng, luồng camera bị hủy an toàn, không có lỗi rò rỉ bộ nhớ hay chạy ngầm.
+
+---
+
+### 6.3 Ghi chú về Môi trường Kiểm thử
+- **Môi trường đã kiểm thử trực tiếp trong quá trình phát triển**:
+  - Trình duyệt Chromium/Blink trên hệ điều hành Windows 11 qua cổng cục bộ `http://localhost:5173/`.
+  - Kiểm tra hoàn chỉnh các luồng: giao diện nút quét, modal 3 tab, nhập mã thủ công, xử lý lỗi ảnh, đóng mở modal qua phím Escape/backdrop và phân giải responsive ở chiều rộng 375px.
+- **Lưu ý với thiết bị di động (Android / iOS)**:
+  - Việc nhận diện camera trên điện thoại thật yêu cầu kết nối **HTTPS** (hoặc tunnel an toàn) do chính sách bảo mật WebRTC / `navigator.mediaDevices.getUserMedia` của trình duyệt di động.
+  - Khi triển khai lên môi trường thực tế (staging / production có chứng chỉ SSL), người dùng có thể dùng camera góc rộng/camera macro và tận dụng khả năng tự động lấy nét (autofocus) của điện thoại để quét mã vạch với tốc độ tối ưu.
+
+

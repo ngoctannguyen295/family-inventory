@@ -9,6 +9,7 @@ interface ProductListProps {
   canEdit?: boolean;
   onEdit?: (product: Product, triggerEl: HTMLElement) => void;
   onViewHistory?: (product: Product, triggerEl: HTMLElement) => void;
+  onOpenBarcodeScanner?: (triggerEl: HTMLElement) => void;
   onOpenAddModal?: () => void;
 }
 
@@ -20,6 +21,7 @@ export function ProductList({
   canEdit,
   onEdit,
   onViewHistory,
+  onOpenBarcodeScanner,
   onOpenAddModal,
 }: ProductListProps) {
   // Trường hợp cơ sở dữ liệu hoàn toàn chưa có sản phẩm nào
@@ -47,15 +49,40 @@ export function ProductList({
         <p className="empty-description">
           Cơ sở dữ liệu kho hàng gia đình hiện chưa có mặt hàng nào. Các sản phẩm được tạo trong hệ thống sẽ xuất hiện tại đây.
         </p>
-        {canEdit && onOpenAddModal && (
-          <button
-            type="button"
-            className="btn-primary-action"
-            onClick={onOpenAddModal}
-          >
-            <span aria-hidden="true">＋</span> Thêm sản phẩm đầu tiên
-          </button>
-        )}
+        <div className="empty-actions-row">
+          {canEdit && onOpenAddModal && (
+            <button
+              type="button"
+              className="btn-primary-action"
+              onClick={onOpenAddModal}
+            >
+              <span aria-hidden="true">＋</span> Thêm sản phẩm đầu tiên
+            </button>
+          )}
+          {onOpenBarcodeScanner && (
+            <button
+              type="button"
+              className="btn-secondary-action"
+              onClick={(e) => onOpenBarcodeScanner(e.currentTarget)}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" />
+              </svg>
+              <span>Quét mã vạch tra cứu</span>
+            </button>
+          )}
+        </div>
       </section>
     );
   }
@@ -85,15 +112,40 @@ export function ProductList({
         <p className="empty-description">
           Không có sản phẩm nào khớp với từ khóa tìm kiếm hoặc danh mục đang chọn.
         </p>
-        {hasFiltersApplied && (
-          <button
-            type="button"
-            className="reset-filter-btn"
-            onClick={onResetFilters}
-          >
-            Xóa bộ lọc & xem tất cả
-          </button>
-        )}
+        <div className="empty-actions-row">
+          {hasFiltersApplied && (
+            <button
+              type="button"
+              className="reset-filter-btn"
+              onClick={onResetFilters}
+            >
+              Xóa bộ lọc & xem tất cả
+            </button>
+          )}
+          {onOpenBarcodeScanner && (
+            <button
+              type="button"
+              className="btn-secondary-action"
+              onClick={(e) => onOpenBarcodeScanner(e.currentTarget)}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" />
+              </svg>
+              <span>Quét mã vạch</span>
+            </button>
+          )}
+        </div>
       </section>
     );
   }
