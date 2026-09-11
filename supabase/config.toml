@@ -1,0 +1,13 @@
+# Supabase CLI & Functions Configuration
+# File: supabase/config.toml
+
+[functions.search-product-image]
+# Cấu hình Gateway JWT Verification:
+# - verify_jwt = false: Đây là lựa chọn kiến trúc để handler bên trong Edge Function
+#   tự chịu trách nhiệm xác thực người dùng và phân quyền chi tiết (auth.ts gọi Supabase
+#   Auth server `supabase.auth.getUser(token)` và kiểm tra `family_members.is_active = true`),
+#   thay vì chỉ giải mã JWT ở cấp gateway.
+# - Lựa chọn này đồng thời giúp handler tự kiểm soát toàn bộ vòng đời của request,
+#   bao gồm kiểm tra Origin allowlist, xử lý CORS preflight (OPTIONS), và trả về
+#   mã lỗi HTTP cùng thông điệp tiếng Việt thống nhất và an toàn.
+verify_jwt = false
