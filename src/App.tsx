@@ -12,6 +12,7 @@ import { ProductList } from './components/ProductList';
 import { ProductFormModal } from './components/ProductFormModal';
 import { ProductHistoryModal } from './components/ProductHistoryModal';
 import { BarcodeScannerModal } from './components/BarcodeScannerModal';
+import { ImageSearchModal } from './components/ImageSearchModal';
 import { clearProductImageCache } from './services/storageService';
 import './App.css';
 
@@ -60,6 +61,10 @@ export function App() {
   const [isBarcodeScannerOpen, setIsBarcodeScannerOpen] = useState(false);
   const barcodeScannerTriggerRef = useRef<HTMLElement | null>(null);
 
+  // 5.3 Quản lý modal Tìm kiếm bằng ảnh bao bì qua AI
+  const [isImageSearchOpen, setIsImageSearchOpen] = useState(false);
+  const imageSearchTriggerRef = useRef<HTMLElement | null>(null);
+
   // 6. Thông báo Toast
   const [toast, setToast] = useState<ToastNotification | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
@@ -105,6 +110,7 @@ export function App() {
         setIsHistoryModalOpen(false);
         setSelectedHistoryProduct(null);
         setIsBarcodeScannerOpen(false);
+        setIsImageSearchOpen(false);
         setMember(null);
         setProducts([]);
         setIsUnauthorized(false);
@@ -311,6 +317,23 @@ export function App() {
   // Xử lý khi chọn sản phẩm từ kết quả quét mã vạch
   const handleSelectProductFromBarcode = useCallback((scannedProduct: Product) => {
     setSearchTerm(scannedProduct.barcode || scannedProduct.code);
+    setSelectedCategory('ALL');
+  }, []);
+
+  // Mở modal Tìm bằng ảnh
+  const handleOpenImageSearch = useCallback((triggerEl: HTMLElement) => {
+    imageSearchTriggerRef.current = triggerEl;
+    setIsImageSearchOpen(true);
+  }, []);
+
+  // Đóng modal Tìm bằng ảnh
+  const handleCloseImageSearch = useCallback(() => {
+    setIsImageSearchOpen(false);
+  }, []);
+
+  // Xử lý khi chọn sản phẩm từ kết quả tìm bằng ảnh: chuyển hướng xem trong danh sách, không sửa đổi dữ liệu
+  const handleSelectProductFromImageSearch = useCallback((matchedProduct: Product) => {
+    setSearchTerm(matchedProduct.barcode || matchedProduct.code);
     setSelectedCategory('ALL');
   }, []);
 
@@ -603,6 +626,7 @@ export function App() {
                   displayedCount={filteredProducts.length}
                   totalCount={products.length}
                   onOpenBarcodeScanner={handleOpenBarcodeScanner}
+                  onOpenImageSearch={handleOpenImageSearch}
                 />
               )}
 
@@ -615,6 +639,7 @@ export function App() {
                 onEdit={handleOpenEditModal}
                 onViewHistory={handleOpenHistoryModal}
                 onOpenBarcodeScanner={handleOpenBarcodeScanner}
+                onOpenImageSearch={handleOpenImageSearch}
                 onOpenAddModal={handleOpenAddModal}
               />
             </>
@@ -654,6 +679,16 @@ export function App() {
           onClose={handleCloseBarcodeScanner}
           onSelectProduct={handleSelectProductFromBarcode}
           triggerElementRef={barcodeScannerTriggerRef}
+        />
+      )}
+
+      {/* Modal Tìm kiếm sản phẩm bằng ảnh bao bì qua AI */}
+      {isImageSearchOpen && (
+        <ImageSearchModal
+          isOpen={isImageSearchOpen}
+          onClose={handleCloseImageSearch}
+          onSelectProduct={handleSelectProductFromImageSearch}
+          triggerElementRef={imageSearchTriggerRef}
         />
       )}
     </div>

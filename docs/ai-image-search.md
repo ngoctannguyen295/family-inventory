@@ -7,7 +7,7 @@ Tài liệu này mô tả chi tiết kiến trúc, cấu hình bảo mật, quy 
 ## 1. Bản chất Giải pháp & Phạm vi Thử nghiệm
 
 > [!IMPORTANT]
-> - **Bản chất giải pháp**: Đây là hệ thống **Trích xuất thông tin bao bì bằng AI Vision (OCR & Package Information Extraction)** thông qua Google Gemini 2.5 Flash, kết hợp với **Thuật toán đối chiếu thông minh theo tập luật (Rule-based Heuristic Matching Engine)** chạy trên Supabase Edge Function.
+> - **Bản chất giải pháp**: Đây là hệ thống **Trích xuất thông tin bao bì bằng AI Vision (OCR & Package Information Extraction)** thông qua Google Gemini 3.6 Flash, kết hợp với **Thuật toán đối chiếu thông minh theo tập luật (Rule-based Heuristic Matching Engine)** chạy trên Supabase Edge Function.
 > - **Chưa phải tìm kiếm vector**: Hệ thống **chưa** sử dụng cơ chế tìm kiếm độ tương đồng vector (Multimodal Vector Embeddings) hoặc cơ sở dữ liệu vector (`pgvector`).
 > - **Bảo vệ dữ liệu kho hàng**: Edge Function **tuyệt đối không gửi toàn bộ kho hàng, giá nhập, giá bán hoặc tồn kho sang cho Gemini**. AI chỉ nhận duy nhất ảnh bao bì tải lên và trả về các thuộc tính khách quan nhìn thấy trên bao bì. Toàn bộ quá trình đối chiếu diễn ra nội bộ trên Edge Function.
 > - **Chỉ số tương đồng là Heuristic**: Điểm `match_score` (0 - 100) là chỉ số đối chiếu chuỗi và thuộc tính dựa trên tập luật xác định, **không phải xác suất thống kê hay độ tin cậy trực tiếp từ mô hình AI**.
@@ -35,7 +35,7 @@ Tài liệu này mô tả chi tiết kiến trúc, cấu hình bảo mật, quy 
 │ 4. Pre-check Kho hàng: 0 sản phẩm hoặc >500 sản phẩm dừng sớm│
 │ 5. Kiểm tra Stream ảnh: Tối đa 5MB, Magic Bytes, 1 trường ảnh│
 │ 6. Trừ Quota nguyên tử (clock_timestamp(), UTC Day/Minute)  │
-│ 7. Gửi ảnh sang Google Gemini 2.5 Flash (Header API Key, 20s)│
+│ 7. Gửi ảnh sang Google Gemini 3.6 Flash (Header API Key, 20s)│
 │ 8. Kiểm tra dữ liệu AI runtime & Bắt buộc có tên sản phẩm  │
 │ 9. Thuật toán Đối chiếu Heuristic & Độc lập Tên/Loại        │
 └─────────────────────────────────────────────────────────────┘
@@ -88,7 +88,7 @@ File migration: [`supabase/migrations/20260911000100_create_ai_usage_quota.sql`]
   - Đã thu hồi toàn bộ quyền truy cập bảng: `REVOKE ALL ON TABLE public.ai_usage_quotas FROM PUBLIC, anon, authenticated;`.
   - Hàm RPC `check_and_increment_ai_quota()` chạy với `SECURITY DEFINER` và `SET search_path = ''`.
 
-### 3.5 Tích hợp Google Gemini 2.5 Flash
+### 3.5 Tích hợp Google Gemini 3.6 Flash
 - Truyền API Key qua HTTP Header: `x-goog-api-key: <KEY>` (không truyền trên query parameter URL để tránh bị ghi nhận vào nhật ký mạng hoặc proxy).
 - Timeout chặt chẽ **20 giây** bao bọc cả quá trình `fetch` và đọc stream response body. Luôn dọn dẹp bộ đếm giờ (`clearTimeout`) trong khối `finally`.
 - Giới hạn dung lượng phản hồi từ Gemini tối đa **1 MiB**.
@@ -200,7 +200,7 @@ npx -y deno check supabase/functions/search-product-image/index.ts
    - Chạy nội dung file [`supabase/migrations/20260911000100_create_ai_usage_quota.sql`](file:///c:/Users/Ngoc%20Tan/Projects/family-inventory/supabase/migrations/20260911000100_create_ai_usage_quota.sql) trong SQL Editor trên Supabase Dashboard.
 2. **Cấu hình Supabase Secrets**:
    - `GEMINI_API_KEY`: Lấy từ Google AI Studio.
-   - `GEMINI_MODEL`: `gemini-2.5-flash`.
+   - `GEMINI_MODEL`: `gemini-3.6-flash`.
    - `ALLOWED_ORIGIN`: Domain production của web (nếu có).
 3. **Deploy Edge Function**:
    ```bash

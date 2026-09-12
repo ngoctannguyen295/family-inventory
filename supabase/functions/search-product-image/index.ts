@@ -147,7 +147,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    // 8. Gửi ảnh sang Google Gemini 2.5 Flash để trích xuất thông tin bao bì (Timeout 20s)
+    // 8. Gửi ảnh sang Google Gemini 3.6 Flash để trích xuất thông tin bao bì (Timeout 20s)
     const aiResult = await analyzeProductImage(
       imageResult.base64,
       imageResult.mimeType

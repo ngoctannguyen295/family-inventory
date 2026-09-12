@@ -9,6 +9,7 @@ interface SearchAndFilterProps {
   displayedCount: number;
   totalCount: number;
   onOpenBarcodeScanner?: (triggerEl: HTMLElement) => void;
+  onOpenImageSearch?: (triggerEl: HTMLElement) => void;
 }
 
 export function SearchAndFilter({
@@ -20,6 +21,7 @@ export function SearchAndFilter({
   displayedCount,
   totalCount,
   onOpenBarcodeScanner,
+  onOpenImageSearch,
 }: SearchAndFilterProps) {
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     onSearchChange(e.target.value);
@@ -100,6 +102,33 @@ export function SearchAndFilter({
                   <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" />
                 </svg>
                 <span>Quét mã</span>
+              </button>
+            )}
+
+            {onOpenImageSearch && (
+              <button
+                type="button"
+                className="btn-search-image"
+                onClick={(e) => onOpenImageSearch(e.currentTarget)}
+                title="Tìm sản phẩm bằng ảnh bao bì qua AI"
+                aria-label="Mở cửa sổ tìm sản phẩm bằng ảnh bao bì"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                  <circle cx="12" cy="13" r="4" />
+                </svg>
+                <span>Tìm bằng ảnh</span>
               </button>
             )}
           </div>

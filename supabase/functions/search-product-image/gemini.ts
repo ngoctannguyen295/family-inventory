@@ -1,4 +1,4 @@
-// Google Gemini 2.5 Flash integration module with x-goog-api-key header, 20s timeout and strict runtime type validation
+// Google Gemini 3.6 Flash integration module with x-goog-api-key header, 20s timeout and strict runtime type validation
 import type { GeminiExtraction } from './types.ts';
 
 export interface GeminiAnalysisResult {
@@ -58,6 +58,39 @@ async function readLimitedResponseText(
 
   result += decoder.decode();
   return result;
+}
+
+/**
+ * Che giấu giá trị API key hiện tại, các chuỗi định dạng API key/token
+ * và cắt ngắn message tối đa 500 ký tự trước khi ghi log server.
+ */
+export function sanitizeErrorMessage(rawMessage: string, currentApiKey?: string): string {
+  if (!rawMessage || typeof rawMessage !== 'string') {
+    return '';
+  }
+
+  let sanitized = rawMessage;
+
+  // 1. Che toàn bộ giá trị API key hiện tại nếu có
+  if (currentApiKey && currentApiKey.trim().length > 0) {
+    sanitized = sanitized.replaceAll(currentApiKey.trim(), '[REDACTED_API_KEY]');
+  }
+
+  // 2. Che các chuỗi có định dạng Google API key (AIza...)
+  sanitized = sanitized.replace(/AIza[0-9A-Za-z_-]{30,40}/g, '[REDACTED_API_KEY]');
+
+  // 3. Che các chuỗi tham số chứa key/api_key/token/auth
+  sanitized = sanitized.replace(/(key|api_key|token|auth)=([a-zA-Z0-9_-]+)/gi, '$1=[REDACTED]');
+
+  // 4. Che Bearer tokens nếu có
+  sanitized = sanitized.replace(/Bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer [REDACTED]');
+
+  // 5. Cắt ngắn tối đa 500 ký tự
+  if (sanitized.length > 500) {
+    sanitized = sanitized.slice(0, 500);
+  }
+
+  return sanitized;
 }
 
 /**
@@ -174,7 +207,7 @@ export async function analyzeProductImage(
   mimeType: 'image/jpeg' | 'image/png' | 'image/webp'
 ): Promise<GeminiAnalysisResult> {
   const apiKey = Deno.env.get('GEMINI_API_KEY');
-  const model = Deno.env.get('GEMINI_MODEL') || 'gemini-2.5-flash';
+  const model = Deno.env.get('GEMINI_MODEL') || 'gemini-3.6-flash';
 
   if (!apiKey) {
     return {
@@ -252,6 +285,47 @@ export async function analyzeProductImage(
     });
 
     if (!response.ok) {
+      let upstreamErrorStatus = 'UNKNOWN';
+      let upstreamErrorMessage = '';
+
+      try {
+        const errorBodyText = await readLimitedResponseText(response, MAX_RESPONSE_BYTES);
+        if (errorBodyText && errorBodyText.trim().length > 0) {
+          try {
+            const errorJson = JSON.parse(errorBodyText);
+            if (errorJson && typeof errorJson === 'object' && errorJson !== null) {
+              const errObj = (errorJson as Record<string, unknown>).error;
+              if (errObj && typeof errObj === 'object' && errObj !== null) {
+                const castErr = errObj as Record<string, unknown>;
+                if (typeof castErr.status === 'string' && castErr.status.trim().length > 0) {
+                  upstreamErrorStatus = castErr.status.trim();
+                }
+                if (typeof castErr.message === 'string' && castErr.message.trim().length > 0) {
+                  upstreamErrorMessage = castErr.message.trim();
+                }
+              } else if (typeof (errorJson as Record<string, unknown>).message === 'string') {
+                upstreamErrorMessage = ((errorJson as Record<string, unknown>).message as string).trim();
+              }
+            }
+          } catch {
+            // Body không phải JSON, sử dụng text thuần
+            upstreamErrorMessage = errorBodyText.trim();
+          }
+        }
+      } catch (readErr) {
+        upstreamErrorMessage = `Failed to read error body: ${readErr instanceof Error ? readErr.message : 'Unknown'}`;
+      }
+
+      if (!upstreamErrorMessage) {
+        upstreamErrorMessage = response.statusText || 'No error message provided';
+      }
+
+      const sanitizedMessage = sanitizeErrorMessage(upstreamErrorMessage, apiKey);
+
+      console.error(
+        `[GEMINI_UPSTREAM_ERROR] HTTP status: ${response.status} | model: ${model} | error.status: ${upstreamErrorStatus} | error.message: ${sanitizedMessage}`
+      );
+
       if (response.status === 429) {
         return {
           success: false,
