@@ -299,3 +299,167 @@ Deno.test('Matching: "Sữa tắm Dove 500ml" nhận diện đúng tên, thươn
   assertEquals(hasShampoo, false);
 });
 
+// =========================================================================
+// REGRESSION TESTS: CA THỰC TẾ YUMANGEL F & CÁC CA BIÊN
+// =========================================================================
+
+const mockYumangelProducts: ProductRecord[] = [
+  {
+    id: 'prod-07',
+    code: '07',
+    barcode: null,
+    name: 'Yumangel F',
+    category: 'Thuốc',
+    unit: 'Hộp',
+    image_url: 'yumangel-f.jpg',
+    purchase_price: 120000,
+    sale_price: 130000,
+    stock: 100,
+    notes: '',
+  },
+  {
+    id: 'prod-08',
+    code: '08',
+    barcode: null,
+    name: 'Yumangel',
+    category: 'Thuốc',
+    unit: 'Hộp',
+    image_url: 'yumangel.jpg',
+    purchase_price: 100000,
+    sale_price: 110000,
+    stock: 50,
+    notes: 'Thuốc dạ dày chữ Y gói xanh lá',
+  },
+  {
+    id: 'prod-09',
+    code: '09',
+    barcode: null,
+    name: 'Viên sủi Vitamin C Yuhan 1000mg',
+    category: 'Thuốc',
+    unit: 'Tuýp',
+    image_url: null,
+    purchase_price: 50000,
+    sale_price: 65000,
+    stock: 20,
+    notes: 'Sản phẩm bổ sung vitamin C',
+  },
+];
+
+Deno.test('Regression: Ca thực tế Yumangel F - AI nhận diện [Yuhan] Hỗn dịch uống 300ml, có "Yumangel F" trong visible_text, kho có mã 07 "Yumangel F" PHẢI TÌM THẤY', () => {
+  const aiExtractionActual: GeminiExtraction = {
+    product_name: 'Hỗn dịch uống',
+    brand: 'Yuhan',
+    variant: 'Gói hỗn dịch uống',
+    quantity_value: 300,
+    quantity_unit: 'ml',
+    visible_text: ['Yumangel F', 'Yuhan', 'Hỗn dịch uống', 'Y'],
+    readable: true,
+  };
+
+  // 1. Tính điểm trực tiếp cho prod-07 (Yumangel F):
+  const scoreResult = calculateMatchScore(mockYumangelProducts[0], aiExtractionActual);
+  assertEquals(scoreResult.score >= 35, true, `Điểm phải đạt >= 35 nhưng chỉ đạt ${scoreResult.score}`);
+
+  // 2. Xếp hạng đối chiếu:
+  const matches = rankProductMatches(mockYumangelProducts, aiExtractionActual);
+  assertEquals(matches.length > 0, true, 'Phải tìm thấy sản phẩm Yumangel F');
+  assertEquals(matches[0].product.code, '07');
+  assertEquals(matches[0].product.name, 'Yumangel F');
+});
+
+Deno.test('Regression: Yumangel F khi AI nhận diện chính xác product_name là "Yumangel F" đạt điểm khớp cao (>= 70)', () => {
+  const aiExtractionAccurate: GeminiExtraction = {
+    product_name: 'Yumangel F',
+    brand: 'Yuhan',
+    variant: 'Hỗn dịch uống',
+    quantity_value: null,
+    quantity_unit: null,
+    visible_text: ['Yumangel F', 'Yuhan', 'Hỗn dịch uống'],
+    readable: true,
+  };
+
+  const matches = rankProductMatches(mockYumangelProducts, aiExtractionAccurate);
+  assertEquals(matches.length > 0, true);
+  assertEquals(matches[0].product.code, '07');
+  assertEquals(matches[0].match_score >= 70, true);
+});
+
+Deno.test('Regression: Không để thiếu nhà sản xuất trong dữ liệu kho trở thành bằng chứng mâu thuẫn (kho chỉ có "Yumangel F" vẫn khớp tốt)', () => {
+  const aiExtraction: GeminiExtraction = {
+    product_name: 'Yumangel F',
+    brand: 'Yuhan Corporation Korea',
+    variant: null,
+    quantity_value: null,
+    quantity_unit: null,
+    visible_text: ['Yumangel F', 'Yuhan'],
+    readable: true,
+  };
+
+  const scoreResult = calculateMatchScore(mockYumangelProducts[0], aiExtraction);
+  // Không có lý do nào bị phạt vì thiếu NSX
+  const hasConflict = scoreResult.reasons.some((r) => r.toLowerCase().includes('mâu thuẫn'));
+  assertEquals(hasConflict, false);
+  assertEquals(scoreResult.score >= 45, true);
+});
+
+Deno.test('Regression: Sản phẩm không liên quan (Viên sủi Vitamin C Yuhan) KHÔNG BỊ GỢI Ý chỉ vì trùng nhà sản xuất Yuhan', () => {
+  const aiYumangel: GeminiExtraction = {
+    product_name: 'Hỗn dịch uống',
+    brand: 'Yuhan',
+    variant: null,
+    quantity_value: 300,
+    quantity_unit: 'ml',
+    visible_text: ['Yumangel F', 'Yuhan', 'Hỗn dịch uống'],
+    readable: true,
+  };
+
+  // Tính điểm cho prod-09 (Viên sủi Vitamin C Yuhan 1000mg)
+  const scoreResult = calculateMatchScore(mockYumangelProducts[2], aiYumangel);
+  // Vì tên sản phẩm ("Viên sủi Vitamin C") không hề khớp với "Hỗn dịch uống" hay "Yumangel F",
+  // không có bằng chứng độc lập về tên sản phẩm phù hợp -> Điểm phải dưới ngưỡng sàn (35) hoặc = 0
+  assertEquals(scoreResult.score < 35, true, `Điểm không được vượt ngưỡng nhưng đạt ${scoreResult.score}`);
+
+  // Khi xếp hạng, Viên sủi Vitamin C Yuhan không được xuất hiện trong matches
+  const matches = rankProductMatches(mockYumangelProducts, aiYumangel);
+  const foundVitaminC = matches.some((m) => m.product.id === 'prod-09');
+  assertEquals(foundVitaminC, false);
+});
+
+Deno.test('Regression: Phân biệt dung tích mỗi gói với tổng cả hộp; không loại sản phẩm chỉ vì đơn vị bán là "Hộp"', () => {
+  const aiExtraction: GeminiExtraction = {
+    product_name: 'Yumangel F',
+    brand: 'Yuhan',
+    variant: 'Hỗn dịch uống',
+    quantity_value: 300, // AI đọc tổng 300ml (20 gói x 15ml)
+    quantity_unit: 'ml',
+    visible_text: ['Yumangel F', '300ml', '20 gói'],
+    readable: true,
+  };
+
+  // prod-07 có unit là 'Hộp', không ghi rõ số ml trong tên
+  const scoreResult = calculateMatchScore(mockYumangelProducts[0], aiExtraction);
+  // Không được có lý do "Khác dung tích" dẫn đến bị phạt -40 điểm
+  const hasDiffPenalty = scoreResult.reasons.some((r) => r.includes('Khác dung tích'));
+  assertEquals(hasDiffPenalty, false);
+  assertEquals(scoreResult.score >= 45, true);
+});
+
+Deno.test('Regression: Phân biệt biến thể hậu tố: "Yumangel F" phải ưu tiên đứng trước "Yumangel" thường', () => {
+  const aiExtraction: GeminiExtraction = {
+    product_name: 'Yumangel F',
+    brand: 'Yuhan',
+    variant: null,
+    quantity_value: null,
+    quantity_unit: null,
+    visible_text: ['Yumangel F', 'Yuhan'],
+    readable: true,
+  };
+
+  const matches = rankProductMatches(mockYumangelProducts, aiExtraction);
+  assertEquals(matches.length >= 1, true);
+  // Sản phẩm đứng đầu bắt buộc phải là Yumangel F (prod-07)
+  assertEquals(matches[0].product.code, '07');
+  assertEquals(matches[0].product.name, 'Yumangel F');
+});
+
+

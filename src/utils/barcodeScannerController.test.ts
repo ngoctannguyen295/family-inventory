@@ -4,6 +4,7 @@ import {
   calculateScanRegion,
   normalizeBarcode,
   createCameraConstraints,
+  parseCameraError,
   BarcodeScannerSessionManager,
   type MinimalHtml5QrcodeInstance,
 } from './barcodeScannerController.ts';
@@ -69,19 +70,80 @@ describe('normalizeBarcode', () => {
 });
 
 describe('createCameraConstraints', () => {
-  it('tạo constraints ưu tiên camera sau và 720p khi không có deviceId', () => {
+  it('tạo constraints với duy nhất 1 key tương thích html5-qrcode khi không có deviceId', () => {
     const { primary, fallback } = createCameraConstraints();
-    assert.deepEqual(primary.facingMode, { ideal: 'environment' });
-    assert.deepEqual(primary.width, { ideal: 1280 });
-    assert.deepEqual(primary.height, { ideal: 720 });
-    assert.equal(fallback.facingMode, 'environment');
+    assert.deepEqual(primary, { facingMode: 'environment' });
+    assert.deepEqual(fallback, { facingMode: 'user' });
+    assert.equal(Object.keys(primary as object).length, 1, 'primary phải có đúng 1 key cho html5-qrcode');
   });
 
   it('tạo constraints với deviceId cụ thể khi có cameraIdOverride', () => {
     const { primary, fallback } = createCameraConstraints('cam-id-123');
-    assert.deepEqual(primary.deviceId, { exact: 'cam-id-123' });
-    assert.deepEqual(primary.width, { ideal: 1280 });
-    assert.deepEqual(fallback.deviceId, { exact: 'cam-id-123' });
+    assert.deepEqual(primary, { deviceId: { exact: 'cam-id-123' } });
+    assert.deepEqual(fallback, { facingMode: 'environment' });
+    assert.equal(Object.keys(primary as object).length, 1, 'primary phải có đúng 1 key cho html5-qrcode');
+  });
+});
+
+describe('parseCameraError', () => {
+  it('nhận diện chính xác lỗi NotAllowedError / quyền camera bị từ chối từ instance Error', () => {
+    const err = new DOMException('Permission denied by user', 'NotAllowedError');
+    const parsed = parseCameraError(err);
+    assert.equal(parsed.type, 'PERMISSION_DENIED');
+    assert.equal(parsed.rawName, 'NotAllowedError');
+    assert.ok(parsed.friendlyMessage.includes('quyền camera trong cài đặt'));
+  });
+
+  it('nhận diện lỗi quyền bị từ chối từ chuỗi trả về của html5-qrcode', () => {
+    const errString = 'Error getting userMedia, error = NotAllowedError: The request is not allowed by the user agent';
+    const parsed = parseCameraError(errString);
+    assert.equal(parsed.type, 'PERMISSION_DENIED');
+    assert.equal(parsed.rawName, 'NotAllowedError');
+  });
+
+  it('nhận diện lỗi camera bận NotReadableError / TrackStartError', () => {
+    const err = new Error('Could not start video source');
+    err.name = 'NotReadableError';
+    const parsed = parseCameraError(err);
+    assert.equal(parsed.type, 'BUSY_OR_IN_USE');
+    assert.equal(parsed.rawName, 'NotReadableError');
+    assert.ok(parsed.friendlyMessage.includes('Camera đang bận'));
+  });
+
+  it('nhận diện lỗi camera bận từ chuỗi html5-qrcode', () => {
+    const errString = 'Error getting userMedia, error = NotReadableError: Device in use';
+    const parsed = parseCameraError(errString);
+    assert.equal(parsed.type, 'BUSY_OR_IN_USE');
+    assert.equal(parsed.rawName, 'NotReadableError');
+  });
+
+  it('nhận diện lỗi không tìm thấy camera NotFoundError', () => {
+    const errString = 'Error getting userMedia, error = NotFoundError: Requested device not found';
+    const parsed = parseCameraError(errString);
+    assert.equal(parsed.type, 'NOT_FOUND');
+    assert.equal(parsed.rawName, 'NotFoundError');
+  });
+
+  it('nhận diện lỗi OverconstrainedError', () => {
+    const errString = 'Error getting userMedia, error = OverconstrainedError: Constraints could not be satisfied';
+    const parsed = parseCameraError(errString);
+    assert.equal(parsed.type, 'OVERCONSTRAINED');
+    assert.equal(parsed.rawName, 'OverconstrainedError');
+  });
+
+  it('nhận diện lỗi phát video PlaybackError / AbortError', () => {
+    const err = new Error('The play() request was interrupted by a call to pause()');
+    err.name = 'AbortError';
+    const parsed = parseCameraError(err);
+    assert.equal(parsed.type, 'PLAYBACK_ERROR');
+    assert.equal(parsed.rawName, 'AbortError');
+  });
+
+  it('xử lý an toàn lỗi không xác định', () => {
+    const parsed = parseCameraError('Something completely random');
+    assert.equal(parsed.type, 'UNKNOWN');
+    assert.equal(parsed.rawName, 'CameraInitError');
+    assert.ok(parsed.friendlyMessage.includes('Không thể khởi động camera'));
   });
 });
 

@@ -31,6 +31,15 @@ export interface ProductMatchResult {
   match_reasons: string[];
 }
 
+export interface TimingMetadata {
+  server_total_ms: number;
+  gemini_ms: number;
+  auth_ms?: number;
+  db_ms?: number;
+  quota_ms?: number;
+  matching_ms?: number;
+}
+
 export interface AiSearchResponse {
   success: boolean;
   error?: string;
@@ -44,6 +53,7 @@ export interface AiSearchResponse {
     remaining_minute: number;
     remaining_day: number;
   };
+  timing?: TimingMetadata;
 }
 
 export function mapProductRecordToProduct(record: ProductRecord): Product {

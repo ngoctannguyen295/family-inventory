@@ -144,17 +144,21 @@ BEGIN
       'deleted_at', old.deleted_at
     );
 
-    -- Xác định loại thao tác nghiệp vụ:
-    -- Nếu deleted_at chuyển từ NULL sang có giá trị: Đây là thao tác XÓA MỀM
-    IF (old.deleted_at IS NULL AND new.deleted_at IS NOT NULL) THEN
+       -- Xác định loại thao tác
+    IF old.deleted_at IS NULL AND new.deleted_at IS NOT NULL THEN
       v_action := 'delete';
-      v_changed_fields := pg_catalog.array_append(v_changed_fields, 'deleted_at');
-    -- Nếu deleted_at chuyển từ có giá trị sang NULL: Đây là thao tác KHÔI PHỤC
-    ELSIF (old.deleted_at IS NOT NULL AND new.deleted_at IS NULL) THEN
+    ELSIF old.deleted_at IS NOT NULL AND new.deleted_at IS NULL THEN
       v_action := 'restore';
-      v_changed_fields := pg_catalog.array_append(v_changed_fields, 'deleted_at');
     ELSE
       v_action := 'update';
+    END IF;
+
+    -- Ghi nhận mọi thay đổi của deleted_at
+    IF old.deleted_at IS DISTINCT FROM new.deleted_at THEN
+      v_changed_fields := pg_catalog.array_append(
+        v_changed_fields,
+        'deleted_at'
+      );
     END IF;
 
     -- So sánh từng trường nghiệp vụ bằng IS DISTINCT FROM (xử lý chính xác cả NULL)

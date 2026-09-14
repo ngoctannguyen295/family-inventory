@@ -466,8 +466,9 @@ export function App() {
     setSelectedHistoryProduct(null);
   }, []);
 
-  // Mở modal Quét mã vạch
+  // Mở modal Quét mã vạch (tự động đóng Tìm bằng ảnh để tránh xung đột camera)
   const handleOpenBarcodeScanner = useCallback((triggerEl: HTMLElement) => {
+    setIsImageSearchOpen(false);
     barcodeScannerTriggerRef.current = triggerEl;
     setIsBarcodeScannerOpen(true);
   }, []);
@@ -483,8 +484,9 @@ export function App() {
     setSelectedCategory('ALL');
   }, []);
 
-  // Mở modal Tìm bằng ảnh
+  // Mở modal Tìm bằng ảnh (tự động đóng Quét mã vạch để tránh xung đột camera)
   const handleOpenImageSearch = useCallback((triggerEl: HTMLElement) => {
+    setIsBarcodeScannerOpen(false);
     imageSearchTriggerRef.current = triggerEl;
     setIsImageSearchOpen(true);
   }, []);
@@ -498,6 +500,7 @@ export function App() {
   const handleSelectProductFromImageSearch = useCallback((matchedProduct: Product) => {
     setSearchTerm(matchedProduct.barcode || matchedProduct.code);
     setSelectedCategory('ALL');
+    setSelectedDetailProduct(matchedProduct);
   }, []);
 
   // Xử lý sau khi lưu sản phẩm thành công

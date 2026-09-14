@@ -62,36 +62,159 @@ export function normalizeBarcode(raw: unknown): string {
 }
 
 /**
- * Tạo constraints cấu hình camera ưu tiên camera sau và độ phân giải 1280x720 ideal
+ * Loại lỗi camera đã được phân loại
+ */
+export type CameraErrorType =
+  | 'PERMISSION_DENIED'
+  | 'NOT_FOUND'
+  | 'BUSY_OR_IN_USE'
+  | 'OVERCONSTRAINED'
+  | 'PLAYBACK_ERROR'
+  | 'UNKNOWN';
+
+export interface ParsedCameraErrorInfo {
+  type: CameraErrorType;
+  friendlyMessage: string;
+  rawName: string;
+  rawMessage: string;
+}
+
+/**
+ * Phân tích và trích xuất chi tiết lỗi khi khởi động camera
+ * Xử lý cả instance Error/DOMException và chuỗi từ chối từ html5-qrcode
+ */
+export function parseCameraError(err: unknown): ParsedCameraErrorInfo {
+  let rawName = '';
+  let rawMessage: string;
+
+  if (err instanceof Error || (typeof err === 'object' && err !== null && 'name' in err)) {
+    rawName = String((err as { name?: unknown }).name || '');
+    rawMessage = String((err as { message?: unknown }).message || '');
+  } else if (typeof err === 'string') {
+    rawMessage = err;
+    const match = err.match(
+      /(NotAllowedError|PermissionDeniedError|NotFoundError|DevicesNotFoundError|NotReadableError|TrackStartError|OverconstrainedError|ConstraintNotSatisfiedError|AbortError)/i
+    );
+    if (match) {
+      rawName = match[1];
+    }
+  } else {
+    rawMessage = String(err);
+  }
+
+  const lowerName = rawName.toLowerCase();
+  const lowerMsg = rawMessage.toLowerCase();
+
+  // 1. Phân biệt quyền truy cập bị từ chối
+  if (
+    lowerName === 'notallowederror' ||
+    lowerName === 'permissiondeniederror' ||
+    lowerMsg.includes('permission') ||
+    lowerMsg.includes('not allowed') ||
+    lowerMsg.includes('denied')
+  ) {
+    return {
+      type: 'PERMISSION_DENIED',
+      friendlyMessage:
+        'Quyền truy cập camera bị từ chối. Vui lòng cho phép quyền camera trong cài đặt trình duyệt (hoặc Cài đặt > Safari trên iPhone) và thử lại.',
+      rawName: rawName || 'NotAllowedError',
+      rawMessage,
+    };
+  }
+
+  // 2. Không tìm thấy thiết bị camera
+  if (
+    lowerName === 'notfounderror' ||
+    lowerName === 'devicesnotfounderror' ||
+    lowerMsg.includes('not found') ||
+    lowerMsg.includes('no camera')
+  ) {
+    return {
+      type: 'NOT_FOUND',
+      friendlyMessage: 'Không tìm thấy thiết bị camera trên máy của bạn.',
+      rawName: rawName || 'NotFoundError',
+      rawMessage,
+    };
+  }
+
+  // 3. Camera đang bận hoặc bị ứng dụng khác chiếm giữ
+  if (
+    lowerName === 'notreadableerror' ||
+    lowerName === 'trackstarterror' ||
+    lowerMsg.includes('notreadable') ||
+    lowerMsg.includes('in use') ||
+    lowerMsg.includes('could not start video source') ||
+    lowerMsg.includes('busy')
+  ) {
+    return {
+      type: 'BUSY_OR_IN_USE',
+      friendlyMessage:
+        'Camera đang bận hoặc đang được sử dụng bởi một ứng dụng khác (hoặc luồng camera trước chưa giải phóng). Vui lòng đóng ứng dụng khác hoặc bấm Thử lại.',
+      rawName: rawName || 'NotReadableError',
+      rawMessage,
+    };
+  }
+
+  // 4. Cấu hình không được thiết bị hỗ trợ
+  if (
+    lowerName === 'overconstrainederror' ||
+    lowerName === 'constraintnotsatisfiederror' ||
+    lowerMsg.includes('overconstrained') ||
+    lowerMsg.includes('constraint')
+  ) {
+    return {
+      type: 'OVERCONSTRAINED',
+      friendlyMessage: 'Cấu hình camera không được thiết bị hỗ trợ.',
+      rawName: rawName || 'OverconstrainedError',
+      rawMessage,
+    };
+  }
+
+  // 5. Lỗi phát luồng video (playsinline / autoplay)
+  if (
+    lowerName === 'aborterror' ||
+    lowerMsg.includes('play()') ||
+    lowerMsg.includes('video surface') ||
+    lowerMsg.includes('streaming not supported')
+  ) {
+    return {
+      type: 'PLAYBACK_ERROR',
+      friendlyMessage: 'Lỗi khi phát video từ camera trên màn hình (autoplay hoặc playsinline).',
+      rawName: rawName || 'PlaybackError',
+      rawMessage,
+    };
+  }
+
+  // 6. Lỗi không xác định
+  return {
+    type: 'UNKNOWN',
+    friendlyMessage:
+      'Không thể khởi động camera. Vui lòng thử lại hoặc chọn cách đọc mã vạch từ ảnh.',
+    rawName: rawName || 'CameraInitError',
+    rawMessage,
+  };
+}
+
+/**
+ * Tạo constraints cấu hình camera tương thích 100% với hàm createVideoConstraints của html5-qrcode
+ * html5-qrcode yêu cầu object truyền vào phải có DUY NHẤT 1 key: 'facingMode' hoặc 'deviceId'
  */
 export function createCameraConstraints(
   cameraIdOverride?: string,
   selectedCameraId?: string
-): { primary: MediaTrackConstraints; fallback: MediaTrackConstraints } {
+): { primary: MediaTrackConstraints | string; fallback: MediaTrackConstraints | string } {
   const deviceId = cameraIdOverride || selectedCameraId;
 
   if (deviceId) {
     return {
-      primary: {
-        deviceId: { exact: deviceId },
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-      },
-      fallback: {
-        deviceId: { exact: deviceId },
-      },
+      primary: { deviceId: { exact: deviceId } },
+      fallback: { facingMode: 'environment' },
     };
   }
 
   return {
-    primary: {
-      facingMode: { ideal: 'environment' },
-      width: { ideal: 1280 },
-      height: { ideal: 720 },
-    },
-    fallback: {
-      facingMode: 'environment',
-    },
+    primary: { facingMode: 'environment' },
+    fallback: { facingMode: 'user' },
   };
 }
 

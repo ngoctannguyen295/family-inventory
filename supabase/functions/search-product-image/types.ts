@@ -40,6 +40,15 @@ export interface QuotaCheckResult {
   retry_after_seconds?: number;
 }
 
+export interface TimingMetadata {
+  server_total_ms: number;
+  gemini_ms: number;
+  auth_ms?: number;
+  db_ms?: number;
+  quota_ms?: number;
+  matching_ms?: number;
+}
+
 export interface ApiResponse<T = unknown> {
   success: boolean;
   error?: string;
@@ -53,5 +62,6 @@ export interface ApiResponse<T = unknown> {
     remaining_minute: number;
     remaining_day: number;
   };
+  timing?: TimingMetadata;
   data?: T;
 }

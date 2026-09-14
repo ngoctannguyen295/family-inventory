@@ -9,9 +9,12 @@ import {
   normalizeBarcode,
   createCameraConstraints,
   applyContinuousFocusIfSupported,
+  parseCameraError,
   BarcodeScannerSessionManager,
   type ScanRegionDimensions,
+  type ParsedCameraErrorInfo,
 } from '../utils/barcodeScannerController';
+import { requestCameraLock, releaseCameraLock } from '../utils/cameraCoordinator';
 
 type ScannerTab = 'camera' | 'file' | 'manual';
 
@@ -38,7 +41,7 @@ export function BarcodeScannerModal({
   // Trạng thái Camera
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [isCameraLoading, setIsCameraLoading] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraError, setCameraError] = useState<ParsedCameraErrorInfo | null>(null);
   const [availableCameras, setAvailableCameras] = useState<{ id: string; label: string }[]>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string>('');
 
@@ -100,7 +103,7 @@ export function BarcodeScannerModal({
     return { Html5Qrcode, formatsToSupport };
   }, []);
 
-  // Dừng camera an toàn tuyệt đối qua SessionManager
+  // Dừng camera an toàn tuyệt đối qua SessionManager và giải phóng cameraCoordinator
   const stopCamera = useCallback(async () => {
     sessionManagerRef.current.invalidateSession();
     clearScanHelpTimer();
@@ -109,6 +112,7 @@ export function BarcodeScannerModal({
     return sessionManagerRef.current.enqueueAction(async () => {
       const scanner = sessionManagerRef.current.getActiveScanner();
       await sessionManagerRef.current.safeStopAndClear(scanner);
+      releaseCameraLock('barcode');
       if (isMountedRef.current) {
         setIsCameraActive(false);
         setIsCameraLoading(false);
@@ -167,11 +171,18 @@ export function BarcodeScannerModal({
     async (cameraIdOverride?: string) => {
       // 1. Kiểm tra môi trường hỗ trợ
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setCameraError(
-          'Trình duyệt hoặc môi trường hiện tại không hỗ trợ camera (cần kết nối an toàn HTTPS hoặc localhost). Vui lòng chọn ảnh có mã vạch hoặc nhập thủ công.'
-        );
+        setCameraError({
+          type: 'NOT_FOUND',
+          friendlyMessage:
+            'Trình duyệt hoặc môi trường hiện tại không hỗ trợ camera (cần kết nối an toàn HTTPS hoặc localhost). Vui lòng chọn ảnh có mã vạch hoặc nhập thủ công.',
+          rawName: 'MediaDevicesNotSupported',
+          rawMessage: 'navigator.mediaDevices.getUserMedia is not available in this browser context.',
+        });
         return;
       }
+
+      // 2. Yêu cầu khóa camera từ cameraCoordinator để dừng mọi stream khác
+      await requestCameraLock('barcode');
 
       return sessionManagerRef.current.enqueueAction(async () => {
         // Khởi tạo phiên quét mới
@@ -192,27 +203,8 @@ export function BarcodeScannerModal({
 
           if (!sessionManagerRef.current.isSessionActive(sessionId) || !isMountedRef.current) {
             setIsCameraLoading(false);
+            releaseCameraLock('barcode');
             return;
-          }
-
-          // Lấy danh sách camera nếu chưa có
-          try {
-            const devices = await Html5Qrcode.getCameras();
-            if (
-              sessionManagerRef.current.isSessionActive(sessionId) &&
-              isMountedRef.current &&
-              devices &&
-              devices.length > 0
-            ) {
-              setAvailableCameras(
-                devices.map((d, index) => ({
-                  id: d.id,
-                  label: d.label || `Camera ${index + 1}`,
-                }))
-              );
-            }
-          } catch {
-            // Nếu không lấy được danh sách, vẫn có thể dùng facingMode
           }
 
           // Tạo instance mới cho khung ngắm
@@ -223,6 +215,7 @@ export function BarcodeScannerModal({
           sessionManagerRef.current.setActiveScanner(scanner);
 
           // Cấu hình vùng quét responsive tối ưu cho mã vạch 1D
+          // LƯU Ý: Không truyền aspectRatio cố định để tránh applyConstraints lỗi trên iOS Safari
           const qrConfig = {
             fps: 10,
             qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
@@ -236,7 +229,6 @@ export function BarcodeScannerModal({
               }
               return region;
             },
-            aspectRatio: 1.333333,
           };
 
           const onScanSuccess = (decodedText: string) => {
@@ -246,7 +238,7 @@ export function BarcodeScannerModal({
             handleBarcodeDetected(decodedText);
           };
 
-          // Tạo cấu hình camera ưu tiên camera sau và 1280x720 ideal
+          // Tạo cấu hình camera tương thích html5-qrcode (đúng 1 key)
           const { primary, fallback } = createCameraConstraints(
             cameraIdOverride,
             selectedCameraId
@@ -255,12 +247,13 @@ export function BarcodeScannerModal({
           try {
             await scanner.start(primary, qrConfig, onScanSuccess, () => {});
           } catch {
-            // Nếu thiết bị từ chối primary constraints (OverconstrainedError), thử fallback
+            // Nếu thiết bị từ chối primary constraints, thử fallback một lần duy nhất
             if (
               !sessionManagerRef.current.isSessionActive(sessionId) ||
               !isMountedRef.current
             ) {
               await sessionManagerRef.current.safeStopAndClear(scanner);
+              releaseCameraLock('barcode');
               return;
             }
             await scanner.start(fallback, qrConfig, onScanSuccess, () => {});
@@ -270,53 +263,61 @@ export function BarcodeScannerModal({
           if (!sessionManagerRef.current.isSessionActive(sessionId) || !isMountedRef.current) {
             // Người dùng đã đóng modal hoặc chuyển tab/camera trong lúc đang start
             await sessionManagerRef.current.safeStopAndClear(scanner);
+            releaseCameraLock('barcode');
             return;
           }
 
-          // Thử áp dụng continuous autofocus nếu camera hỗ trợ
+          // Cấu hình video element cho iOS Safari: playsinline và muted
           const videoEl = document.querySelector(
             `#${SCANNER_CONTAINER_ID} video`
           ) as HTMLVideoElement | null;
+          if (videoEl) {
+            videoEl.setAttribute('playsinline', 'true');
+            videoEl.setAttribute('webkit-playsinline', 'true');
+            videoEl.muted = true;
+          }
+
+          // Thử áp dụng continuous autofocus nếu camera hỗ trợ
           await applyContinuousFocusIfSupported(videoEl);
+
+          // Lấy danh sách camera sau khi đã cấp quyền thành công (không gọi trước start để tránh xung đột trên iOS)
+          if (navigator.mediaDevices?.enumerateDevices) {
+            navigator.mediaDevices
+              .enumerateDevices()
+              .then((devices) => {
+                if (
+                  sessionManagerRef.current.isSessionActive(sessionId) &&
+                  isMountedRef.current
+                ) {
+                  const videoDevices = devices.filter((d) => d.kind === 'videoinput');
+                  if (videoDevices.length > 0) {
+                    setAvailableCameras(
+                      videoDevices.map((d, index) => ({
+                        id: d.deviceId,
+                        label: d.label || `Camera ${index + 1}`,
+                      }))
+                    );
+                  }
+                }
+              })
+              .catch(() => {});
+          }
 
           setIsCameraActive(true);
           setIsCameraLoading(false);
         } catch (err: unknown) {
           if (!sessionManagerRef.current.isSessionActive(sessionId)) {
+            releaseCameraLock('barcode');
             return;
           }
 
           setIsCameraLoading(false);
           setIsCameraActive(false);
+          releaseCameraLock('barcode');
 
-          const errorName = err instanceof Error ? err.name : '';
-          const errorMessage = err instanceof Error ? err.message : String(err);
-
-          if (
-            errorName === 'NotAllowedError' ||
-            errorName === 'PermissionDeniedError' ||
-            errorMessage.includes('Permission')
-          ) {
-            setCameraError(
-              'Quyền truy cập camera bị từ chối. Vui lòng cho phép quyền truy cập camera trong cài đặt trình duyệt để tiếp tục.'
-            );
-          } else if (
-            errorName === 'NotFoundError' ||
-            errorName === 'DevicesNotFoundError' ||
-            errorMessage.includes('not found')
-          ) {
-            setCameraError('Không tìm thấy thiết bị camera trên máy của bạn.');
-          } else if (
-            errorName === 'NotReadableError' ||
-            errorName === 'TrackStartError' ||
-            errorMessage.includes('in use')
-          ) {
-            setCameraError('Camera đang được sử dụng bởi một ứng dụng khác.');
-          } else {
-            setCameraError(
-              'Không thể khởi động camera. Vui lòng thử lại hoặc chọn cách đọc mã vạch từ ảnh.'
-            );
-          }
+          // Phân tích chi tiết lỗi (NotAllowedError, NotReadableError, NotFoundError,...)
+          const parsedError = parseCameraError(err);
+          setCameraError(parsedError);
         }
       });
     },
@@ -476,11 +477,12 @@ export function BarcodeScannerModal({
     }
   };
 
-  // Đóng modal an toàn
+  // Đóng modal an toàn và giải phóng camera
   const handleClose = useCallback(async () => {
     clearScanHelpTimer();
     setShowScanHelp(false);
     await stopCamera();
+    releaseCameraLock('barcode');
     onClose();
     if (triggerElementRef?.current) {
       triggerElementRef.current.focus();
@@ -495,7 +497,21 @@ export function BarcodeScannerModal({
     }
   };
 
-  // Quản lý unmount và đóng modal
+  // Tự động khởi động camera khi mở modal ở tab camera
+  useEffect(() => {
+    if (isOpen && activeTab === 'camera') {
+      const timer = setTimeout(() => {
+        if (isMountedRef.current) {
+          void startCamera();
+        }
+      }, 50);
+      return () => {
+        clearTimeout(timer);
+      };
+    }
+  }, [isOpen, activeTab, startCamera]);
+
+  // Quản lý unmount và dọn dẹp cameraCoordinator
   useEffect(() => {
     isMountedRef.current = true;
     const sessionManager = sessionManagerRef.current;
@@ -503,6 +519,7 @@ export function BarcodeScannerModal({
       isMountedRef.current = false;
       clearScanHelpTimer();
       sessionManager.cleanup();
+      releaseCameraLock('barcode');
     };
   }, [clearScanHelpTimer]);
 
@@ -857,11 +874,34 @@ export function BarcodeScannerModal({
                       ⚠️
                     </span>
                     <div className="alert-content">
-                      <p>{cameraError}</p>
+                      <p>{cameraError.friendlyMessage}</p>
+                      {cameraError.rawName && (
+                        <small
+                          className="camera-error-detail"
+                          style={{
+                            display: 'block',
+                            marginTop: '4px',
+                            opacity: 0.85,
+                            fontSize: '0.8rem',
+                            wordBreak: 'break-word',
+                          }}
+                        >
+                          Mã lỗi kỹ thuật: <code>{cameraError.rawName}</code>
+                          {cameraError.rawMessage &&
+                          cameraError.rawMessage !== cameraError.rawName &&
+                          !cameraError.rawMessage.includes('MediaDevicesNotSupported')
+                            ? ` (${cameraError.rawMessage.slice(0, 100)})`
+                            : ''}
+                        </small>
+                      )}
                       <button
                         type="button"
                         className="btn-text-action"
-                        onClick={() => startCamera()}
+                        style={{ marginTop: '8px' }}
+                        onClick={() => {
+                          setCameraError(null);
+                          void startCamera();
+                        }}
                       >
                         Thử lại
                       </button>

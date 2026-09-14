@@ -41,9 +41,20 @@ Deno.serve(async (req: Request) => {
     );
   }
 
+  const requestId = crypto.randomUUID();
+  const requestStartTime = performance.now();
+  let authTimeMs: number | undefined;
+  let dbTimeMs: number | undefined;
+  let quotaTimeMs: number | undefined;
+  let geminiTimeMs: number | undefined;
+  let matchingTimeMs: number | undefined;
+
   try {
     // 4. Xác thực Bearer Token qua Supabase Auth và kiểm tra quyền thành viên gia đình (Active)
+    const authStartTime = performance.now();
     const authResult = await authenticateRequest(req);
+    authTimeMs = Math.round(performance.now() - authStartTime);
+
     if (!authResult.success || !authResult.context) {
       return jsonResponse(
         {
@@ -60,12 +71,14 @@ Deno.serve(async (req: Request) => {
 
     // 5. Kiểm tra kho hàng TRƯỚC KHI trừ quota và trước khi gọi Gemini
     // Tiết kiệm chi phí và hạn mức của người dùng nếu kho rỗng hoặc vượt quá 500 sản phẩm
+    const dbStartTime = performance.now();
     const { data: productsData, error: productsError } = await userClient
       .from('products')
       .select('id, code, barcode, name, category, unit, image_url, purchase_price, sale_price, stock, notes')
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(MAX_SUPPORTED_PRODUCTS + 1);
+    dbTimeMs = Math.round(performance.now() - dbStartTime);
 
     if (productsError) {
       return jsonResponse(
@@ -90,6 +103,12 @@ Deno.serve(async (req: Request) => {
         matches: [],
         total_inventory_scanned: 0,
         inventory_limit_exceeded: false,
+        timing: {
+          server_total_ms: Math.round(performance.now() - requestStartTime),
+          gemini_ms: 0,
+          auth_ms: authTimeMs,
+          db_ms: dbTimeMs,
+        },
       };
       return jsonResponse(emptyInventoryResponse, 200, req);
     }
@@ -128,7 +147,10 @@ Deno.serve(async (req: Request) => {
 
     // 7. Kiểm tra và tăng định mức sử dụng AI nguyên tử (Tối đa 5 lượt/phút, 50 lượt/ngày UTC)
     // Sau khi kho và ảnh đều hợp lệ, tiến hành trừ quota
+    const quotaStartTime = performance.now();
     const quotaResult = await checkAndConsumeQuota(userClient);
+    quotaTimeMs = Math.round(performance.now() - quotaStartTime);
+
     if (!quotaResult.allowed) {
       return jsonResponse(
         {
@@ -149,10 +171,12 @@ Deno.serve(async (req: Request) => {
     }
 
     // 8. Gửi ảnh sang Google Gemini 3.6 Flash để trích xuất thông tin bao bì (Timeout 20s)
+    const aiStartTime = performance.now();
     const aiResult = await analyzeProductImage(
       imageResult.base64,
       imageResult.mimeType
     );
+    geminiTimeMs = aiResult.durationMs ?? Math.round(performance.now() - aiStartTime);
 
     if (!aiResult.success || !aiResult.data) {
       return jsonResponse(
@@ -164,6 +188,13 @@ Deno.serve(async (req: Request) => {
             remaining_minute: quotaResult.remaining_minute ?? 0,
             remaining_day: quotaResult.remaining_day ?? 0,
           },
+          timing: {
+            server_total_ms: Math.round(performance.now() - requestStartTime),
+            gemini_ms: geminiTimeMs,
+            auth_ms: authTimeMs,
+            db_ms: dbTimeMs,
+            quota_ms: quotaTimeMs,
+          },
         },
         aiResult.status,
         req
@@ -172,20 +203,30 @@ Deno.serve(async (req: Request) => {
 
     const aiExtraction = aiResult.data;
 
-    // 9. Nếu ảnh không đọc được, hoặc product_name sau chuẩn hóa chỉ bằng brand
+    // 9. Nếu ảnh không đọc được, hoặc dữ liệu chỉ có thương hiệu mà không có tên sản phẩm hay chữ bao bì
     const normName = aiExtraction.product_name
       ? removeVietnameseTones(aiExtraction.product_name)
       : '';
     const normBrand = aiExtraction.brand
       ? removeVietnameseTones(aiExtraction.brand)
       : '';
+    const hasVisibleWords = Boolean(
+      aiExtraction.visible_text &&
+        aiExtraction.visible_text.some((t) => !isOnlyBrandOrQuantity(t, aiExtraction.brand))
+    );
     const isNameOnlyBrand = Boolean(
       normBrand &&
         (normName === normBrand ||
-          isOnlyBrandOrQuantity(aiExtraction.product_name || '', aiExtraction.brand))
+          isOnlyBrandOrQuantity(aiExtraction.product_name || '', aiExtraction.brand)) &&
+        !hasVisibleWords
     );
 
-    if (!aiExtraction.readable || !aiExtraction.product_name || isNameOnlyBrand) {
+    if (!aiExtraction.readable || (!aiExtraction.product_name && !hasVisibleWords) || isNameOnlyBrand) {
+      const totalServerTimeMs = Math.round(performance.now() - requestStartTime);
+      console.log(
+        `[SEARCH_TIMING] reqId: ${requestId} | auth: ${authTimeMs}ms | db: ${dbTimeMs}ms | quota: ${quotaTimeMs}ms | gemini: ${geminiTimeMs}ms | not_recognized | total: ${totalServerTimeMs}ms`
+      );
+
       const notRecognizedResponse: ApiResponse = {
         success: true,
         recognized: false,
@@ -198,13 +239,29 @@ Deno.serve(async (req: Request) => {
           remaining_minute: quotaResult.remaining_minute ?? 0,
           remaining_day: quotaResult.remaining_day ?? 0,
         },
+        timing: {
+          server_total_ms: totalServerTimeMs,
+          gemini_ms: geminiTimeMs,
+          auth_ms: authTimeMs,
+          db_ms: dbTimeMs,
+          quota_ms: quotaTimeMs,
+        },
       };
 
       return jsonResponse(notRecognizedResponse, 200, req);
     }
 
     // 10. Thực hiện thuật toán đối chiếu thông minh và xếp hạng kết quả
+    const matchStartTime = performance.now();
     const matches = rankProductMatches(productsToScan, aiExtraction);
+    matchingTimeMs = Math.round(performance.now() - matchStartTime);
+
+    const totalServerTimeMs = Math.round(performance.now() - requestStartTime);
+
+    // Ghi log máy chủ có cấu trúc: Tuyệt đối không log ảnh, base64, token, hoặc API key
+    console.log(
+      `[SEARCH_TIMING] reqId: ${requestId} | auth: ${authTimeMs}ms | db: ${dbTimeMs}ms | quota: ${quotaTimeMs}ms | gemini: ${geminiTimeMs}ms | matching: ${matchingTimeMs}ms | total: ${totalServerTimeMs}ms | matches: ${matches.length}`
+    );
 
     // 11. Trả về kết quả hoàn tất
     const responsePayload: ApiResponse = {
@@ -222,10 +279,23 @@ Deno.serve(async (req: Request) => {
         remaining_minute: quotaResult.remaining_minute ?? 0,
         remaining_day: quotaResult.remaining_day ?? 0,
       },
+      timing: {
+        server_total_ms: totalServerTimeMs,
+        gemini_ms: geminiTimeMs,
+        auth_ms: authTimeMs,
+        db_ms: dbTimeMs,
+        quota_ms: quotaTimeMs,
+        matching_ms: matchingTimeMs,
+      },
     };
 
     return jsonResponse(responsePayload, 200, req);
   } catch {
+    const totalServerTimeMs = Math.round(performance.now() - requestStartTime);
+    console.error(
+      `[SEARCH_ERROR] reqId: ${requestId} | unhandled error after ${totalServerTimeMs}ms`
+    );
+
     // 12. Bắt lỗi không xác định và chỉ trả thông báo lỗi an toàn cố định, không lộ err.message
     return jsonResponse(
       {

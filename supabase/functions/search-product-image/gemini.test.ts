@@ -42,3 +42,83 @@ Deno.test('sanitizeErrorMessage: Giữ nguyên thông báo an toàn không chứ
 
   assertEquals(sanitized, safeMsg);
 });
+
+// Tests cho extractJsonText
+import { extractJsonText, validateRuntimeExtraction } from './gemini.ts';
+
+Deno.test('extractJsonText: Bóc tách thành công JSON thuần', () => {
+  const raw = '{"readable":true,"product_name":"Mì Hảo Hảo","brand":"Acecook"}';
+  const result = extractJsonText(raw);
+  assertEquals(result, raw);
+  assertEquals(JSON.parse(result).product_name, 'Mì Hảo Hảo');
+});
+
+Deno.test('extractJsonText: Bóc tách thành công JSON bọc trong Markdown codeblock ```json', () => {
+  const raw = '```json\n{\n  "readable": true,\n  "product_name": "Sữa tắm Dove",\n  "brand": "Dove"\n}\n```';
+  const result = extractJsonText(raw);
+  assertEquals(JSON.parse(result).product_name, 'Sữa tắm Dove');
+});
+
+Deno.test('extractJsonText: Bóc tách thành công JSON có BOM và khoảng trắng', () => {
+  const raw = '\uFEFF  \n{"readable":false,"product_name":null}  \n';
+  const result = extractJsonText(raw);
+  assertEquals(JSON.parse(result).readable, false);
+});
+
+Deno.test('extractJsonText: Trích xuất JSON khi có văn bản phụ bao ngoài', () => {
+  const raw = 'Dưới đây là kết quả phân tích bao bì sản phẩm:\n{"readable":true,"product_name":"Dầu gội Clear","brand":"Clear"}\nChúc bạn một ngày tốt lành!';
+  const result = extractJsonText(raw);
+  assertEquals(JSON.parse(result).product_name, 'Dầu gội Clear');
+});
+
+Deno.test('validateRuntimeExtraction: Kiểm tra hợp lệ dữ liệu trích xuất đầy đủ', () => {
+  const validObj = {
+    readable: true,
+    product_name: 'Nước mắm Nam Ngư',
+    brand: 'Nam Ngư',
+    variant: 'Đệ Nhị',
+    quantity_value: 900,
+    quantity_unit: 'ml',
+    visible_text: ['Nam Ngư', 'Đệ Nhị', '900ml'],
+  };
+  const validated = validateRuntimeExtraction(validObj);
+  assertEquals(validated?.readable, true);
+  assertEquals(validated?.product_name, 'Nước mắm Nam Ngư');
+  assertEquals(validated?.quantity_value, 900);
+});
+
+Deno.test('validateRuntimeExtraction: Từ chối dữ liệu thiếu readable boolean hoặc sai kiểu', () => {
+  const invalid1 = { readable: 'true', product_name: 'Test' };
+  assertEquals(validateRuntimeExtraction(invalid1), null);
+
+  const invalid2 = { readable: true, quantity_value: -50 };
+  assertEquals(validateRuntimeExtraction(invalid2), null);
+});
+
+// Tests cho buildGeminiThinkingConfig
+import { buildGeminiThinkingConfig } from './gemini.ts';
+
+Deno.test('buildGeminiThinkingConfig: Tự động tắt thinking (thinkingBudget: 0) cho Gemini 2.5', () => {
+  const cfg = buildGeminiThinkingConfig('gemini-2.5-flash');
+  assertEquals(cfg, { thinkingBudget: 0 });
+});
+
+Deno.test('buildGeminiThinkingConfig: Tự động đặt thinkingLevel: MINIMAL cho Gemini 3', () => {
+  const cfg = buildGeminiThinkingConfig('gemini-3.6-flash');
+  assertEquals(cfg, { thinkingLevel: 'MINIMAL' });
+});
+
+Deno.test('buildGeminiThinkingConfig: Ưu tiên biến môi trường GEMINI_THINKING_BUDGET nếu có', () => {
+  const cfg = buildGeminiThinkingConfig('gemini-3.6-flash', '512');
+  assertEquals(cfg, { thinkingBudget: 512 });
+});
+
+Deno.test('buildGeminiThinkingConfig: Ưu tiên biến môi trường GEMINI_THINKING_LEVEL nếu có', () => {
+  const cfg = buildGeminiThinkingConfig('gemini-2.5-flash', undefined, 'low');
+  assertEquals(cfg, { thinkingLevel: 'LOW' });
+});
+
+Deno.test('buildGeminiThinkingConfig: Trả undefined cho các model không thuộc 2.5 hoặc 3', () => {
+  const cfg = buildGeminiThinkingConfig('gemini-1.5-flash');
+  assertEquals(cfg, undefined);
+});

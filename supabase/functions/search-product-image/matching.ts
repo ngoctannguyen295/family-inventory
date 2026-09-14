@@ -183,6 +183,29 @@ export function detectProductTypeConflict(
 }
 
 /**
+ * Chuẩn hóa chuỗi văn bản: không dấu, bỏ ký tự đặc biệt, đưa về chữ thường
+ */
+export function normalizeCleanText(str: string): string {
+  if (!str) return '';
+  return removeVietnameseTones(str)
+    .replace(/[^a-z0-9\s]/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Tách các từ khóa có nghĩa từ chuỗi:
+ * Giữ các từ >= 2 ký tự HOẶC các ký tự đơn lẻ là chữ/số (ví dụ: "F", "A", "1") đóng vai trò hậu tố biến thể.
+ */
+export function extractSignificantTokens(str: string): string[] {
+  const clean = normalizeCleanText(str);
+  if (!clean) return [];
+  return clean
+    .split(/\s+/)
+    .filter((t) => t.length >= 2 || /^[a-z0-9]$/i.test(t));
+}
+
+/**
  * Tính điểm tương đồng đối chiếu giữa thông tin trích xuất từ ảnh và sản phẩm trong kho (0 đến 100).
  *
  * LƯU Ý KỸ THUẬT:
@@ -196,7 +219,9 @@ export function calculateMatchScore(
   const reasons: string[] = [];
 
   const prodRawText = `${product.name} ${product.notes || ''} ${product.category || ''}`;
-  const prodNoTone = removeVietnameseTones(prodRawText);
+  const prodCleanText = normalizeCleanText(prodRawText);
+  const prodCleanName = normalizeCleanText(product.name);
+  const prodNameTokens = extractSignificantTokens(product.name);
 
   // 0. Phát hiện mâu thuẫn loại sản phẩm (ví dụ: sữa tắm Dove vs dầu gội Dove)
   const aiCombinedText = `${ai.product_name || ''} ${ai.variant || ''} ${(ai.visible_text || []).join(' ')}`;
@@ -216,89 +241,157 @@ export function calculateMatchScore(
   let variantScore = 0;
   let visibleScore = 0;
 
-  // 1. Đối chiếu thương hiệu (Brand) theo word boundary
+  // 1. Đối chiếu thương hiệu / Nhà sản xuất (Brand) theo word boundary
+  // Không bắt buộc kho phải chứa tên nhà sản xuất. Thiếu NSX trong kho không bị phạt.
   if (ai.brand) {
-    const brandNoTone = removeVietnameseTones(ai.brand);
-    if (brandNoTone.length >= 2 && containsWordBoundary(prodNoTone, brandNoTone)) {
-      brandScore = 25;
-      reasons.push(`Trùng thương hiệu "${ai.brand}"`);
+    const brandClean = normalizeCleanText(ai.brand);
+    if (brandClean.length >= 2 && containsWordBoundary(prodCleanText, brandClean)) {
+      brandScore = 20;
+      reasons.push(`Trùng thương hiệu / NSX "${ai.brand}"`);
     }
   }
 
-  // 2. Đối chiếu tên sản phẩm (Product Name)
-  // Nếu product_name sau chuẩn hóa chỉ bằng brand (hoặc chỉ gồm brand và quy cách), không tính điểm name
-  const isNameJustBrand =
-    Boolean(ai.brand && ai.product_name && isOnlyBrandOrQuantity(ai.product_name, ai.brand));
+  // 2. Đối chiếu Tên sản phẩm thương mại (Product Name)
+  const isNameJustBrand = Boolean(
+    ai.brand && ai.product_name && isOnlyBrandOrQuantity(ai.product_name, ai.brand)
+  );
 
-  if (ai.product_name && !isNameJustBrand) {
-    const nameNoTone = removeVietnameseTones(ai.product_name);
-    // Khớp toàn bộ cụm tên sản phẩm theo word boundary
-    if (nameNoTone.length >= 3 && containsWordBoundary(prodNoTone, nameNoTone)) {
-      nameScore = 35;
-      reasons.push(`Khớp tên sản phẩm "${ai.product_name}"`);
+  const aiNameClean = ai.product_name && !isNameJustBrand ? normalizeCleanText(ai.product_name) : '';
+  const aiNameTokens = ai.product_name && !isNameJustBrand ? extractSignificantTokens(ai.product_name) : [];
+
+  if (aiNameClean) {
+    // 2a. Khớp toàn bộ cụm tên sản phẩm (Full phrase match)
+    if (
+      (prodCleanName.length >= 3 && aiNameClean.includes(prodCleanName)) ||
+      (aiNameClean.length >= 3 && prodCleanName.includes(aiNameClean)) ||
+      (prodCleanName.length >= 3 && containsWordBoundary(prodCleanText, aiNameClean))
+    ) {
+      nameScore = 45;
+      reasons.push(`Khớp chính xác tên sản phẩm "${ai.product_name}"`);
     } else {
-      // Tách token từ khóa theo ranh giới từ, loại bỏ từ quá ngắn (< 2 ký tự)
-      const keywords = nameNoTone
-        .split(/[^a-z0-9]+/i)
-        .map((k) => k.trim())
-        .filter((k) => k.length >= 2);
-
-      let matchedCount = 0;
-      for (const kw of keywords) {
-        if (containsWordBoundary(prodNoTone, kw)) {
-          matchedCount++;
+      // 2b. Khớp theo tập từ khóa
+      if (prodNameTokens.length > 0 && aiNameTokens.length > 0) {
+        let matchedCount = 0;
+        for (const token of prodNameTokens) {
+          if (aiNameTokens.includes(token) || containsWordBoundary(aiNameClean, token)) {
+            matchedCount++;
+          }
         }
-      }
-
-      if (keywords.length > 0 && matchedCount > 0) {
-        const ratio = matchedCount / keywords.length;
-        nameScore = Math.round(ratio * 25);
-        if (nameScore >= 10) {
-          reasons.push(`Trùng ${matchedCount}/${keywords.length} từ khóa tên sản phẩm`);
+        const ratio = matchedCount / prodNameTokens.length;
+        if (ratio >= 0.5) {
+          nameScore = Math.round(ratio * 35);
+          reasons.push(`Trùng ${matchedCount}/${prodNameTokens.length} từ khóa tên sản phẩm`);
         }
       }
     }
   }
 
-  // 3. Đối chiếu biến thể / phân loại (Variant)
+  // 3. Đối chiếu biến thể / phân loại / quy cách (Variant)
   if (ai.variant) {
-    const variantNoTone = removeVietnameseTones(ai.variant);
-    if (variantNoTone.length >= 2 && containsWordBoundary(prodNoTone, variantNoTone)) {
+    const variantClean = normalizeCleanText(ai.variant);
+    if (variantClean.length >= 2 && containsWordBoundary(prodCleanText, variantClean)) {
       variantScore = 15;
       reasons.push(`Khớp phân loại / dòng "${ai.variant}"`);
     }
   }
 
   // 4. Đối chiếu từ khóa đọc được trên bao bì (Visible Text)
-  // Lưu ý quan trọng: Không coi thương hiệu hoặc dung tích xuất hiện lại trong visible_text
-  // là bằng chứng độc lập về tên/loại sản phẩm.
+  // ĐẶC BIỆT QUAN TRỌNG:
+  // Nếu AI nhận diện product_name là tên loại chung (ví dụ "Hỗn dịch uống"), nhưng trong visible_text
+  // có chứa tên thương mại trùng khớp với tên trong kho (ví dụ "Yumangel F"),
+  // thì đây là BẰNG CHỨNG TRỰC TIẾP MẠNH MẼ và phải được tính điểm cao.
   let visibleEvidenceCount = 0;
+  let visibleFullMatch = false;
+
   if (ai.visible_text && ai.visible_text.length > 0) {
-    let matchedVisible = 0;
+    let matchedVisibleCount = 0;
+
     for (const text of ai.visible_text) {
-      const textNoTone = removeVietnameseTones(text);
-      if (textNoTone.length >= 2 && containsWordBoundary(prodNoTone, textNoTone)) {
-        matchedVisible++;
-        // Chỉ coi là bằng chứng độc lập nếu text không phải là thương hiệu hoặc dung tích
+      const textClean = normalizeCleanText(text);
+      if (!textClean || textClean.length < 2) continue;
+
+      // 4a. Kiểm tra khớp toàn bộ cụm tên sản phẩm trong kho với một dòng trong visible_text
+      // Chỉ tính khi tên sản phẩm không chỉ là tên thương hiệu/quy cách
+      if (
+        prodCleanName.length >= 3 &&
+        !isOnlyBrandOrQuantity(product.name, ai.brand) &&
+        (textClean === prodCleanName || containsWordBoundary(textClean, prodCleanName))
+      ) {
+        visibleFullMatch = true;
+        reasons.push(`Khớp trọn vẹn tên sản phẩm từ bao bì: "${text}"`);
+        visibleEvidenceCount += 2;
+        break;
+      }
+
+      // 4b. Khớp từng phần theo từ ngữ (không tính khi text chỉ là thương hiệu / dung tích)
+      if (containsWordBoundary(prodCleanText, textClean)) {
+        matchedVisibleCount++;
         if (!isOnlyBrandOrQuantity(text, ai.brand)) {
           visibleEvidenceCount++;
         }
       }
     }
-    if (matchedVisible > 0) {
-      visibleScore = Math.min(10, matchedVisible * 3);
-      reasons.push(`Khớp ${matchedVisible} từ ngữ nhận diện trên bao bì`);
+
+    if (visibleFullMatch) {
+      // Bằng chứng mạnh từ visible_text khớp tên sản phẩm
+      visibleScore = Math.max(visibleScore, 40);
+    } else if (matchedVisibleCount > 0) {
+      visibleScore = Math.min(15, matchedVisibleCount * 4);
+      reasons.push(`Khớp ${matchedVisibleCount} cụm từ trên bao bì`);
+    }
+  }
+
+  // 4c. Kiểm tra bao phủ từ khóa tên sản phẩm trên toàn bộ dữ liệu nhận diện của AI
+  // Loại bỏ các token trùng với brand để tránh việc trùng tên NSX bị tính là trùng tên sản phẩm
+  const prodTokensNonBrand = prodNameTokens.filter((token) => {
+    if (ai.brand) {
+      const brandClean = normalizeCleanText(ai.brand);
+      if (brandClean === token || containsWordBoundary(brandClean, token)) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  if (nameScore < 35 && !visibleFullMatch && prodTokensNonBrand.length > 0) {
+    const allAiCleanText = normalizeCleanText(
+      `${ai.product_name || ''} ${ai.variant || ''} ${(ai.visible_text || []).join(' ')}`
+    );
+    let matchedAllTokens = 0;
+    for (const token of prodTokensNonBrand) {
+      if (containsWordBoundary(allAiCleanText, token)) {
+        matchedAllTokens++;
+      }
+    }
+    const overallRatio = matchedAllTokens / prodTokensNonBrand.length;
+    if (overallRatio === 1.0) {
+      // Khớp 100% tất cả các từ của tên sản phẩm (không tính brand) trên bao bì
+      const coverageScore = 40;
+      if (coverageScore > nameScore + visibleScore) {
+        visibleScore = coverageScore;
+        reasons.push(
+          `Khớp đầy đủ ${prodTokensNonBrand.length}/${prodTokensNonBrand.length} từ của tên sản phẩm trên bao bì`
+        );
+        visibleEvidenceCount += 2;
+      }
+    } else if (overallRatio >= 0.65) {
+      const coverageScore = Math.round(overallRatio * 30);
+      if (coverageScore > nameScore + visibleScore) {
+        visibleScore = coverageScore;
+        reasons.push(
+          `Khớp ${matchedAllTokens}/${prodTokensNonBrand.length} từ của tên sản phẩm trên bao bì`
+        );
+        visibleEvidenceCount += 1;
+      }
     }
   }
 
   // YÊU CẦU BẮT BUỘC: Phải có bằng chứng độc lập về tên hoặc loại sản phẩm phù hợp.
-  // Không coi thương hiệu hoặc dung tích (kể cả khi xuất hiện lại trong visible_text)
-  // là bằng chứng độc lập về tên/loại sản phẩm.
+  // Không coi việc chỉ trùng thương hiệu/nhà sản xuất là bằng chứng độc lập.
+  // Sản phẩm không liên quan (khác tên) không được gợi ý chỉ vì cùng nhà sản xuất.
   const hasSubstantiveEvidence =
-    nameScore > 0 || variantScore > 0 || visibleEvidenceCount > 0;
+    nameScore >= 15 || variantScore >= 15 || visibleFullMatch || visibleEvidenceCount > 0;
 
-  // ÁP DỤNG KIỂM TRA NÀY TRƯỚC KHI CỘNG ĐIỂM DUNG TÍCH:
-  // Nếu không có bằng chứng độc lập về tên/loại sản phẩm, dừng ngay và trả về điểm 0.
   if (!hasSubstantiveEvidence) {
     return {
       score: 0,
@@ -306,8 +399,15 @@ export function calculateMatchScore(
     };
   }
 
-  // 5. Đối chiếu dung tích / khối lượng tịnh (chỉ thực hiện khi ĐÃ CÓ bằng chứng độc lập)
+  // 5. Đối chiếu dung tích / khối lượng tịnh
+  // QUY TẮC AN TOÀN:
+  // - Không phạt sản phẩm chỉ vì đơn vị bán là "Hộp", "Thùng", "Lốc", "Gói" khi kho không ghi rõ số ml/g.
+  // - Phân biệt dung tích mỗi gói với dung tích cả hộp.
+  // - Chỉ phạt khi CẢ HAI BÊN đều có quy cách dung tích đơn vị rõ ràng và cùng đơn vị cơ sở.
   let score = brandScore + nameScore + variantScore + visibleScore;
+
+  const prodUnitClean = normalizeCleanText(product.unit || '');
+  const isPackagingUnit = ['hop', 'thung', 'loc', 'vi', 'goi', 'cai', 'chiec'].includes(prodUnitClean);
 
   let aiQuantity: StandardizedQuantity | null = null;
   if (ai.quantity_value && ai.quantity_unit) {
@@ -316,17 +416,17 @@ export function calculateMatchScore(
     aiQuantity = extractQuantityFromText(ai.product_name);
   }
 
+  // Chỉ trích xuất dung tích sản phẩm trong kho nếu có ghi rõ số trong tên hoặc ghi chú
   const prodQuantity = extractQuantityFromText(`${product.name} ${product.notes || ''}`);
 
   if (aiQuantity && prodQuantity) {
     const isQtyMatch = compareQuantities(aiQuantity, prodQuantity);
     if (isQtyMatch === true) {
       score += 15;
-      reasons.push(
-        `Khớp dung tích / trọng lượng (${aiQuantity.value} ${aiQuantity.baseUnit})`
-      );
-    } else if (isQtyMatch === false) {
-      // Phạt nặng nếu khác quy cách đóng gói (ví dụ 980ml vs 1000ml, hoặc 500ml vs 1L)
+      reasons.push(`Khớp dung tích / trọng lượng (${aiQuantity.value} ${aiQuantity.baseUnit})`);
+    } else if (isQtyMatch === false && !isPackagingUnit) {
+      // Chỉ phạt nặng khi cả hai bên là sản phẩm bán lẻ theo chai/lọ có dung tích khác nhau (ví dụ 500ml vs 1L)
+      // Không phạt khi đơn vị bán trong kho là Hộp / Thùng
       score -= 40;
       reasons.push(
         `Khác dung tích / trọng lượng (Bao bì: ${aiQuantity.value} ${aiQuantity.baseUnit} ≠ Kho: ${prodQuantity.value} ${prodQuantity.baseUnit})`
@@ -347,23 +447,30 @@ export const MAX_MATCHES = 5; // Tối đa 5 sản phẩm
 
 /**
  * Đối chiếu thông tin AI trích xuất với danh sách sản phẩm trong kho và xếp hạng kết quả.
- * Nếu ảnh không đọc được, hoặc product_name sau chuẩn hóa chỉ bằng brand, trả về mảng rỗng []
- * để yêu cầu người dùng chụp rõ hơn.
+ * Nếu ảnh không đọc được, hoặc dữ liệu trích xuất chỉ có thương hiệu mà không có tên sản phẩm
+ * hay từ ngữ trên bao bì, trả về mảng rỗng [].
  */
 export function rankProductMatches(
   products: ProductRecord[],
   ai: GeminiExtraction
 ): ProductMatchResult[] {
-  // Bắt buộc phải đọc được và có tên sản phẩm
-  if (!ai.readable || !ai.product_name || ai.product_name.trim().length === 0) {
+  // Bắt buộc phải đọc được
+  if (!ai.readable) {
     return [];
   }
 
-  // Nếu product_name sau chuẩn hóa chỉ bằng brand (hoặc chỉ gồm brand và quy cách đóng gói),
-  // trả về [] để yêu cầu người dùng chụp rõ hơn tên/loại sản phẩm
-  const normName = removeVietnameseTones(ai.product_name);
-  const normBrand = ai.brand ? removeVietnameseTones(ai.brand) : '';
-  if (normBrand && (normName === normBrand || isOnlyBrandOrQuantity(ai.product_name, ai.brand))) {
+  // Phải có tên sản phẩm có nghĩa HOẶC có mảng visible_text có từ ngữ có nghĩa (không chỉ là brand hay quantity)
+  const hasSubstantiveVisible = Boolean(
+    ai.visible_text &&
+      ai.visible_text.some((t) => !isOnlyBrandOrQuantity(t, ai.brand))
+  );
+
+  const hasSubstantiveName = Boolean(
+    ai.product_name &&
+      !isOnlyBrandOrQuantity(ai.product_name, ai.brand)
+  );
+
+  if (!hasSubstantiveName && !hasSubstantiveVisible) {
     return [];
   }
 

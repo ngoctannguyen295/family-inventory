@@ -72,13 +72,19 @@ export interface AiSearchResult {
   message: string;
   status?: number;
   retryAfterSeconds?: number;
+  clientDurationMs?: number;
 }
 
 /**
  * Gửi ảnh bao bì lên Supabase Edge Function `search-product-image`
  * Sử dụng phiên đăng nhập hiện tại và FormData thuần (không tự đặt Content-Type)
  */
-export async function searchProductByImage(file: File): Promise<AiSearchResult> {
+export async function searchProductByImage(
+  file: File,
+  signal?: AbortSignal
+): Promise<AiSearchResult> {
+  const clientStartTime = performance.now();
+
   if (!supabase) {
     return {
       success: false,
@@ -108,6 +114,7 @@ export async function searchProductByImage(file: File): Promise<AiSearchResult> 
       'search-product-image',
       {
         body: formData,
+        signal,
       }
     );
 
@@ -188,13 +195,30 @@ export async function searchProductByImage(file: File): Promise<AiSearchResult> 
       };
     }
 
+    const clientDurationMs = Math.round(performance.now() - clientStartTime);
+
     return {
       success: data.success,
       data,
       message: data.message || 'Đã phân tích ảnh thành công.',
       status: 200,
+      clientDurationMs,
     };
   } catch (err) {
+    const isAbort =
+      (err instanceof DOMException && err.name === 'AbortError') ||
+      (err instanceof Error && err.name === 'AbortError');
+
+    if (isAbort) {
+      return {
+        success: false,
+        error: 'aborted',
+        message: 'Yêu cầu tìm kiếm đã được hủy bỏ.',
+        status: 0,
+        clientDurationMs: Math.round(performance.now() - clientStartTime),
+      };
+    }
+
     const errorMsg =
       err instanceof Error ? err.message : 'Đã xảy ra lỗi không mong muốn khi tìm kiếm ảnh.';
     return {
@@ -204,6 +228,7 @@ export async function searchProductByImage(file: File): Promise<AiSearchResult> 
         ? 'Lỗi kết nối mạng đến máy chủ. Vui lòng kiểm tra lại đường truyền internet.'
         : errorMsg,
       status: 500,
+      clientDurationMs: Math.round(performance.now() - clientStartTime),
     };
   }
 }
