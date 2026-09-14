@@ -18,6 +18,8 @@ interface ProductFormModalProps {
   onClose: () => void;
   onSaveSuccess: (savedProduct: Product, isEdit: boolean) => void;
   triggerElementRef?: React.RefObject<HTMLElement | null>;
+  isOnline?: boolean;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 // Gợi ý các đơn vị tính thông dụng trong tạp hóa
@@ -30,6 +32,8 @@ interface FormDialogProps {
   onClose: () => void;
   onSaveSuccess: (savedProduct: Product, isEdit: boolean) => void;
   triggerElementRef?: React.RefObject<HTMLElement | null>;
+  isOnline?: boolean;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 const DRAFT_KEY = 'family_inventory_new_product_draft';
@@ -40,6 +44,8 @@ function ProductFormDialog({
   onClose,
   onSaveSuccess,
   triggerElementRef,
+  isOnline = true,
+  onDirtyChange,
 }: FormDialogProps) {
   const isEdit = Boolean(productToEdit);
 
@@ -161,6 +167,41 @@ function ProductFormDialog({
   const [uploadStepText, setUploadStepText] = useState<string | null>(null);
   const uploadedStoragePathRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Kiểm tra biểu mẫu có thay đổi chưa lưu (dirty state)
+  const isDirty = isEdit
+    ? Boolean(
+        productToEdit &&
+          (code !== productToEdit.code ||
+            name !== productToEdit.name ||
+            category !== productToEdit.category ||
+            unit !== productToEdit.unit ||
+            (barcode || '') !== (productToEdit.barcode || '') ||
+            purchasePrice !== String(productToEdit.purchasePrice) ||
+            salePrice !== String(productToEdit.salePrice) ||
+            stock !== String(productToEdit.stock) ||
+            (notes || '') !== (productToEdit.notes || '') ||
+            selectedFile !== null)
+      )
+    : Boolean(
+        code.trim() !== '' ||
+          name.trim() !== '' ||
+          category.trim() !== '' ||
+          unit.trim() !== '' ||
+          barcode.trim() !== '' ||
+          purchasePrice.trim() !== '' ||
+          (salePrice.trim() !== '' && salePrice !== '0') ||
+          (stock.trim() !== '' && stock !== '0') ||
+          notes.trim() !== '' ||
+          selectedFile !== null
+      );
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+    return () => {
+      onDirtyChange?.(false);
+    };
+  }, [isDirty, onDirtyChange]);
 
   // Thu hồi Object URL của preview khi previewUrl thay đổi hoặc unmount
   useEffect(() => {
@@ -332,6 +373,13 @@ function ProductFormDialog({
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setFormError(null);
+
+    // Chặn lưu dữ liệu khi đang mất kết nối mạng
+    if (isOnline === false) {
+      setFormError('Đang mất kết nối mạng. Không thể lưu dữ liệu trong lúc mất kết nối.');
+      return;
+    }
+
     const errors: Record<string, string> = {};
 
     // 1. Kiểm tra các trường văn bản
@@ -874,6 +922,12 @@ function ProductFormDialog({
             />
           </div>
 
+          {isOnline === false && (
+            <div className="form-offline-notice" role="alert">
+              <span>⚠️ Đang mất kết nối mạng. Không thể lưu dữ liệu lúc này.</span>
+            </div>
+          )}
+
           <div className="modal-actions">
             <button
               type="button"
@@ -883,7 +937,12 @@ function ProductFormDialog({
             >
               Hủy
             </button>
-            <button type="submit" className="btn-save" disabled={isSubmitting}>
+            <button
+              type="submit"
+              className="btn-save"
+              disabled={isSubmitting || isOnline === false}
+              title={isOnline === false ? 'Không thể lưu khi mất kết nối mạng' : undefined}
+            >
               {isSubmitting ? (
                 <span className="btn-loading-state">
                   <span className="spinner-dot" aria-hidden="true"></span>

@@ -15,6 +15,7 @@ interface ImageSearchModalProps {
   onClose: () => void;
   onSelectProduct?: (product: Product) => void;
   triggerElementRef?: RefObject<HTMLElement | null>;
+  isOnline?: boolean;
 }
 
 export function ImageSearchModal({
@@ -22,6 +23,7 @@ export function ImageSearchModal({
   onClose,
   onSelectProduct,
   triggerElementRef,
+  isOnline = true,
 }: ImageSearchModalProps) {
   // Trạng thái file ảnh được chọn
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -198,6 +200,13 @@ export function ImageSearchModal({
   // Thực hiện gọi Edge Function tìm kiếm sản phẩm bằng ảnh
   const handleSearch = async () => {
     if (!selectedFile || isSearching) return;
+
+    if (isOnline === false) {
+      setSearchError({
+        message: 'Đang mất kết nối mạng. Tính năng tìm kiếm bằng ảnh qua AI yêu cầu kết nối Internet.',
+      });
+      return;
+    }
 
     setIsSearching(true);
     setSearchError(null);
@@ -737,6 +746,12 @@ export function ImageSearchModal({
                       </div>
                     </div>
 
+                    {isOnline === false && (
+                      <div className="search-offline-notice" role="alert">
+                        <span>⚠️ Đang mất kết nối mạng. Cần có mạng để gửi ảnh đến AI.</span>
+                      </div>
+                    )}
+
                     {/* TRẠNG THÁI ĐANG TÌM KIẾM */}
                     {isSearching ? (
                       <div className="searching-progress-card">
@@ -752,6 +767,8 @@ export function ImageSearchModal({
                           type="button"
                           className="btn-primary btn-start-search"
                           onClick={handleSearch}
+                          disabled={isOnline === false}
+                          title={isOnline === false ? 'Không thể tìm kiếm khi mất kết nối mạng' : undefined}
                         >
                           <svg
                             xmlns="http://www.w3.org/2000/svg"

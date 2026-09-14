@@ -13,6 +13,9 @@ import { ProductFormModal } from './components/ProductFormModal';
 import { ProductHistoryModal } from './components/ProductHistoryModal';
 import { BarcodeScannerModal } from './components/BarcodeScannerModal';
 import { ImageSearchModal } from './components/ImageSearchModal';
+import { OfflineBanner } from './components/OfflineBanner';
+import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
+import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { clearProductImageCache } from './services/storageService';
 import './App.css';
 
@@ -49,8 +52,12 @@ export function App() {
   // 5. Quản lý modal Thêm / Sửa sản phẩm
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
+  const [isFormDirty, setIsFormDirty] = useState(false);
   const addBtnRef = useRef<HTMLButtonElement | null>(null);
   const activeTriggerRef = useRef<HTMLElement | null>(null);
+
+  // 5.0 Quản lý trạng thái mạng trực tuyến
+  const isOnline = useOnlineStatus();
 
   // 5.1 Quản lý modal Lịch sử sản phẩm
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
@@ -288,6 +295,7 @@ export function App() {
   const handleCloseModal = useCallback(() => {
     setIsModalOpen(false);
     setProductToEdit(null);
+    setIsFormDirty(false);
   }, []);
 
   // Mở modal Lịch sử sản phẩm
@@ -594,6 +602,12 @@ export function App() {
         )}
 
         <main className="app-main">
+          {/* Cảnh báo mất kết nối mạng */}
+          <OfflineBanner
+            isOnline={isOnline}
+            hasDisplayedData={products.length > 0}
+          />
+
           {/* Trạng thái đang tải sản phẩm (chỉ hiện panel to khi danh sách đang rỗng) */}
           {isProductsLoading && products.length === 0 && (
             <div className="state-panel loading-panel">
@@ -660,6 +674,8 @@ export function App() {
         onClose={handleCloseModal}
         onSaveSuccess={handleSaveSuccess}
         triggerElementRef={activeTriggerRef}
+        isOnline={isOnline}
+        onDirtyChange={setIsFormDirty}
       />
 
       {/* Modal Lịch sử thay đổi sản phẩm */}
@@ -689,8 +705,20 @@ export function App() {
           onClose={handleCloseImageSearch}
           onSelectProduct={handleSelectProductFromImageSearch}
           triggerElementRef={imageSearchTriggerRef}
+          isOnline={isOnline}
         />
       )}
+
+      {/* Hộp thoại thông báo cập nhật phiên bản mới PWA (registerType: 'prompt') */}
+      <PwaUpdatePrompt
+        isFormDirty={isModalOpen && isFormDirty}
+        onBlockedByDirtyForm={() => {
+          showToast({
+            text: 'Bạn có thay đổi chưa lưu trong biểu mẫu sản phẩm. Vui lòng lưu hoặc hủy thay đổi trước khi cập nhật.',
+            type: 'warning',
+          });
+        }}
+      />
     </div>
   );
 }
