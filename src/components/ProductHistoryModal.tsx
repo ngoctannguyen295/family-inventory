@@ -27,6 +27,7 @@ const FIELD_LABELS: Record<string, string> = {
   sale_price: 'Giá bán',
   stock: 'Số lượng tồn',
   notes: 'Ghi chú',
+  deleted_at: 'Trạng thái lưu trữ',
 };
 
 // Thứ tự hiển thị ưu tiên các trường khi tạo mới
@@ -52,6 +53,12 @@ function formatFieldValue(
   unit?: string,
   isNewImageReplacement?: boolean
 ): string {
+  if (field === 'deleted_at') {
+    return val && String(val).trim() !== ''
+      ? 'Đã chuyển vào Đã xóa'
+      : 'Đang hoạt động (Đã khôi phục)';
+  }
+
   if (field === 'image_url') {
     if (isNewImageReplacement) {
       return 'Đã thay ảnh';
@@ -277,18 +284,29 @@ export function ProductHistoryModal({
               <div className="history-timeline" role="feed" aria-label="Dòng thời gian thay đổi">
                 {entries.map((entry) => {
                   const isCreate = entry.action === 'create';
+                  const isDelete = entry.action === 'delete';
+                  const isRestore = entry.action === 'restore';
+                  let actionLabel = 'Cập nhật sản phẩm';
+                  let actionClass = 'action-update';
+                  if (isCreate) {
+                    actionLabel = 'Tạo sản phẩm';
+                    actionClass = 'action-create';
+                  } else if (isDelete) {
+                    actionLabel = 'Đã chuyển vào Đã xóa';
+                    actionClass = 'action-delete';
+                  } else if (isRestore) {
+                    actionLabel = 'Khôi phục sản phẩm';
+                    actionClass = 'action-restore';
+                  }
+
                   const changedFields = entry.changedFields || [];
 
                   return (
                     <article key={entry.id} className="history-card">
                       <div className="history-card-header">
                         <div className="history-header-left">
-                          <span
-                            className={`history-action-tag ${
-                              isCreate ? 'action-create' : 'action-update'
-                            }`}
-                          >
-                            {isCreate ? 'Tạo sản phẩm' : 'Cập nhật sản phẩm'}
+                          <span className={`history-action-tag ${actionClass}`}>
+                            {actionLabel}
                           </span>
                           <span className="history-actor-name">
                             {entry.actorName}

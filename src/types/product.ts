@@ -10,6 +10,7 @@ export interface Product {
   stock: number;
   unit: string;
   notes?: string;
+  deletedAt?: string | null;
 }
 
 export type CategoryOption = string;

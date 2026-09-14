@@ -24,7 +24,7 @@ export function Header({
       <div className="header-top">
         <div className="brand-badge">
           <span className="brand-dot" aria-hidden="true"></span>
-          Family Inventory
+          <span className="brand-name">Kho gia đình</span>
         </div>
 
         {member && (
@@ -56,11 +56,11 @@ export function Header({
 
       <div className="header-main">
         <div className="header-title-group">
-          <h1 className="header-title">Hàng hóa gia đình</h1>
+          <h1 className="header-title">Kho gia đình</h1>
           <div className="header-stat">
-            <span className="stat-label">Tổng danh mục:</span>
+            <span className="stat-label">Tổng số:</span>
             <strong className="stat-number">{totalCount}</strong>
-            <span className="stat-unit">sản phẩm</span>
+            <span className="stat-unit">mặt hàng</span>
           </div>
         </div>
 
@@ -73,10 +73,12 @@ export function Header({
             aria-label="Thêm sản phẩm mới vào kho hàng"
           >
             <span className="btn-add-icon" aria-hidden="true">＋</span>
-            Thêm sản phẩm
+            <span>Thêm sản phẩm</span>
           </button>
         )}
       </div>
     </header>
   );
 }
+
+export default Header;

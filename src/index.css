@@ -4,20 +4,20 @@
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
     'Courier New', monospace;
 
-  /* Colors */
-  --color-bg: #f8fafc;
+  /* Colors - Sky Blue Theme (Kho gia đình) */
+  --color-bg: #f0f9ff;
   --color-surface: #ffffff;
-  --color-surface-hover: #f1f5f9;
-  --color-border: #e2e8f0;
-  --color-border-hover: #cbd5e1;
+  --color-surface-hover: #e0f2fe;
+  --color-border: #bae6fd;
+  --color-border-hover: #7dd3fc;
 
-  --color-text-primary: #0f172a;
-  --color-text-secondary: #475569;
+  --color-text-primary: #082f49;
+  --color-text-secondary: #075985;
   --color-text-muted: #64748b;
 
-  --color-primary: #2563eb;
-  --color-primary-light: #eff6ff;
-  --color-primary-dark: #1d4ed8;
+  --color-primary: #0284c7;
+  --color-primary-light: #e0f2fe;
+  --color-primary-dark: #0369a1;
 
   --color-success: #16a34a;
   --color-success-bg: #f0fdf4;
@@ -32,9 +32,9 @@
   --color-warning-border: #fde68a;
 
   /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 2px 0 rgba(2, 132, 199, 0.06);
+  --shadow-md: 0 4px 6px -1px rgba(2, 132, 199, 0.08), 0 2px 4px -2px rgba(2, 132, 199, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(2, 132, 199, 0.1), 0 4px 6px -4px rgba(2, 132, 199, 0.06);
 
   /* Radii */
   --radius-sm: 6px;
@@ -63,6 +63,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 #root {

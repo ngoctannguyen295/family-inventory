@@ -112,8 +112,8 @@ function renderBoxPixel(x, y, width, height, isMaskable = false) {
   const nx = (x - width / 2) / (width / 2);
   const ny = (y - height / 2) / (height / 2);
 
-  // Nền xanh thương hiệu #2563eb
-  const bgR = 37, bgG = 99, bgB = 235;
+  // Nền xanh da trời thương hiệu #0284c7 (Sky 600)
+  const bgR = 2, bgG = 132, bgB = 199;
 
   // Tỉ lệ hộp hàng: maskable cần safe zone (<= 0.45)
   const scale = isMaskable ? 0.43 : 0.56;
@@ -186,7 +186,7 @@ function renderBoxPixel(x, y, width, height, isMaskable = false) {
       const localY = (ny - (0.02 + centerY) * scale) / (0.28 * scale);
       if (localY > 0.4 && localY < 0.48) return [30, 41, 59, 255]; // vạch mã
       if (localY > 0.56 && localY < 0.64) return [30, 41, 59, 255]; // vạch mã
-      if (localY > 0.72 && localY < 0.78) return [37, 99, 235, 255]; // vạch xanh
+      if (localY > 0.72 && localY < 0.78) return [2, 132, 199, 255]; // vạch xanh da trời
       return [255, 255, 255, 255];
     }
     // Màu mặt bên phải (bóng đổ nhẹ)

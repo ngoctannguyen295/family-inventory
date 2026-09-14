@@ -2,13 +2,15 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import type { Product } from './types/product';
-import type { FamilyMember, ProductRow } from './types/database';
-import { mapProductRow } from './types/database';
+import type { FamilyMember } from './types/database';
 import { removeVietnameseTones } from './utils/formatters';
 import { Header } from './components/Header';
 import { Login } from './components/Login';
 import { SearchAndFilter } from './components/SearchAndFilter';
 import { ProductList } from './components/ProductList';
+import { ProductDetailModal } from './components/ProductDetailModal';
+import { ProductDeleteConfirmModal } from './components/ProductDeleteConfirmModal';
+import { DeletedProductsModal } from './components/DeletedProductsModal';
 import { ProductFormModal } from './components/ProductFormModal';
 import { ProductHistoryModal } from './components/ProductHistoryModal';
 import { BarcodeScannerModal } from './components/BarcodeScannerModal';
@@ -17,6 +19,12 @@ import { OfflineBanner } from './components/OfflineBanner';
 import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { clearProductImageCache } from './services/storageService';
+import {
+  fetchActiveProducts,
+  fetchDeletedProducts,
+  softDeleteProduct,
+  restoreProduct,
+} from './services/productService';
 import './App.css';
 
 interface ToastNotification {
@@ -39,36 +47,51 @@ export function App() {
   const [memberError, setMemberError] = useState<string | null>(null);
   const [isUnauthorized, setIsUnauthorized] = useState(false);
 
-  // 3. Quản lý trạng thái sản phẩm
+  // 3. Quản lý trạng thái sản phẩm đang sử dụng (deleted_at IS NULL)
   const [products, setProducts] = useState<Product[]>([]);
   const [isProductsLoading, setIsProductsLoading] = useState(false);
   const [productsError, setProductsError] = useState<string | null>(null);
+
+  // 3.1 Quản lý danh sách sản phẩm đã xóa mềm (deleted_at IS NOT NULL)
+  const [deletedProducts, setDeletedProducts] = useState<Product[]>([]);
+  const [isDeletedLoading, setIsDeletedLoading] = useState(false);
+  const [deletedError, setDeletedError] = useState<string | null>(null);
+  const [isDeletedModalOpen, setIsDeletedModalOpen] = useState(false);
 
   // 4. Quản lý bộ lọc & tìm kiếm
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [retryCounter, setRetryCounter] = useState(0);
 
-  // 5. Quản lý modal Thêm / Sửa sản phẩm
+  // 5. Quản lý modal Chi tiết sản phẩm
+  const [selectedDetailProduct, setSelectedDetailProduct] = useState<Product | null>(null);
+  const detailTriggerRef = useRef<HTMLElement | null>(null);
+
+  // 5.1 Quản lý modal Xác nhận xóa mềm
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // 5.2 Quản lý modal Thêm / Sửa sản phẩm
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
   const [isFormDirty, setIsFormDirty] = useState(false);
   const addBtnRef = useRef<HTMLButtonElement | null>(null);
   const activeTriggerRef = useRef<HTMLElement | null>(null);
 
-  // 5.0 Quản lý trạng thái mạng trực tuyến
+  // 5.3 Quản lý trạng thái mạng trực tuyến
   const isOnline = useOnlineStatus();
 
-  // 5.1 Quản lý modal Lịch sử sản phẩm
+  // 5.4 Quản lý modal Lịch sử sản phẩm
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [selectedHistoryProduct, setSelectedHistoryProduct] = useState<Product | null>(null);
   const historyTriggerRef = useRef<HTMLElement | null>(null);
 
-  // 5.2 Quản lý modal Quét mã vạch
+  // 5.5 Quản lý modal Quét mã vạch
   const [isBarcodeScannerOpen, setIsBarcodeScannerOpen] = useState(false);
   const barcodeScannerTriggerRef = useRef<HTMLElement | null>(null);
 
-  // 5.3 Quản lý modal Tìm kiếm bằng ảnh bao bì qua AI
+  // 5.6 Quản lý modal Tìm kiếm bằng ảnh bao bì qua AI
   const [isImageSearchOpen, setIsImageSearchOpen] = useState(false);
   const imageSearchTriggerRef = useRef<HTMLElement | null>(null);
 
@@ -102,16 +125,19 @@ export function App() {
       setIsAuthChecking(false);
     });
 
-    // Lắng nghe thay đổi auth (QUY TẮC: Chỉ cập nhật state, không await async query trong callback)
+    // Lắng nghe thay đổi auth
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, currentSession) => {
       setIsAuthChecking(false);
 
       if (!currentSession) {
-        // Đăng xuất hoặc đổi tài khoản: đóng modal và xóa toàn bộ dữ liệu, thu hồi cache ảnh
+        // Đăng xuất hoặc đổi tài khoản: đóng modal và xóa toàn bộ dữ liệu
         clearProductImageCache();
         setSession(null);
+        setSelectedDetailProduct(null);
+        setIsDeleteConfirmOpen(false);
+        setIsDeletedModalOpen(false);
         setIsModalOpen(false);
         setProductToEdit(null);
         setIsHistoryModalOpen(false);
@@ -120,6 +146,7 @@ export function App() {
         setIsImageSearchOpen(false);
         setMember(null);
         setProducts([]);
+        setDeletedProducts([]);
         setIsUnauthorized(false);
         setMemberError(null);
         setProductsError(null);
@@ -130,12 +157,10 @@ export function App() {
       }
 
       setSession((prev) => {
-        // Nếu đổi sang tài khoản người dùng khác, dọn dẹp cache ảnh của tài khoản cũ
         if (prev?.user?.id && prev.user.id !== currentSession.user.id) {
           clearProductImageCache();
         }
 
-        // Nếu user id và token không đổi, giữ nguyên reference để tránh trigger effect thừa
         if (
           prev?.user?.id === currentSession.user.id &&
           prev?.access_token === currentSession.access_token
@@ -157,6 +182,30 @@ export function App() {
   }, []);
 
   const userId = session?.user?.id;
+
+  // Hàm tải danh sách sản phẩm đang sử dụng và sản phẩm đã xóa
+  const reloadProducts = useCallback(async (canEditUser?: boolean) => {
+    setIsProductsLoading(true);
+    setProductsError(null);
+
+    const res = await fetchActiveProducts();
+    if (res.error) {
+      setProductsError(res.error);
+      setIsProductsLoading(false);
+      return;
+    }
+
+    setProducts(res.data ?? []);
+    setIsProductsLoading(false);
+
+    // Nếu người dùng có quyền chỉnh sửa, tải thêm số lượng và danh sách đã xóa
+    if (canEditUser) {
+      const delRes = await fetchDeletedProducts();
+      if (!delRes.error && delRes.data) {
+        setDeletedProducts(delRes.data);
+      }
+    }
+  }, []);
 
   // Tải thông tin thành viên và danh mục sản phẩm từ Supabase
   useEffect(() => {
@@ -192,34 +241,18 @@ export function App() {
           setIsUnauthorized(true);
           setMember(null);
           setProducts([]);
+          setDeletedProducts([]);
           setIsMemberLoading(false);
           return;
         }
 
         // Thành viên hợp lệ
-        setMember(memberData as FamilyMember);
+        const activeMember = memberData as FamilyMember;
+        setMember(activeMember);
         setIsMemberLoading(false);
 
-        // 2. Tải danh sách sản phẩm từ public.products
-        setIsProductsLoading(true);
-        setProductsError(null);
-
-        const { data: productsData, error: productsErr } = await supabase!
-          .from('products')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (!isMounted) return;
-
-        if (productsErr) {
-          setProductsError('Không thể tải danh sách hàng hóa từ máy chủ. Vui lòng thử lại.');
-          setIsProductsLoading(false);
-          return;
-        }
-
-        const mapped = ((productsData as ProductRow[]) ?? []).map(mapProductRow);
-        setProducts(mapped);
-        setIsProductsLoading(false);
+        // 2. Tải danh mục hàng hóa
+        await reloadProducts(activeMember.can_edit);
       } catch {
         if (!isMounted) return;
         setMemberError('Đã xảy ra lỗi không xác định khi tải dữ liệu.');
@@ -232,20 +265,24 @@ export function App() {
     return () => {
       isMounted = false;
     };
-  }, [userId, retryCounter]);
+  }, [userId, retryCounter, reloadProducts]);
 
-  // Xử lý đăng xuất an toàn (kiểm tra cả error của Supabase)
+  // Xử lý đăng xuất an toàn
   const handleSignOut = useCallback(async () => {
     if (!supabase) return;
     setIsSigningOut(true);
     setSignOutError(null);
 
-    // Đóng form nếu đang mở
+    // Đóng toàn bộ các modal
+    setSelectedDetailProduct(null);
+    setIsDeleteConfirmOpen(false);
+    setIsDeletedModalOpen(false);
     setIsModalOpen(false);
     setProductToEdit(null);
     setIsHistoryModalOpen(false);
     setSelectedHistoryProduct(null);
     setIsBarcodeScannerOpen(false);
+    setIsImageSearchOpen(false);
 
     try {
       const { error } = await supabase.auth.signOut();
@@ -255,10 +292,10 @@ export function App() {
         return;
       }
 
-      // Đăng xuất thành công: xóa ngay state và dọn dẹp cache ảnh
       clearProductImageCache();
       setMember(null);
       setProducts([]);
+      setDeletedProducts([]);
       setIsUnauthorized(false);
       setMemberError(null);
       setProductsError(null);
@@ -277,6 +314,19 @@ export function App() {
     setRetryCounter((prev) => prev + 1);
   }, []);
 
+  // Mở modal Chi tiết sản phẩm khi bấm vào thẻ sản phẩm
+  const handleSelectProduct = useCallback((prod: Product, triggerEl: HTMLElement) => {
+    setSelectedDetailProduct(prod);
+    detailTriggerRef.current = triggerEl;
+  }, []);
+
+  // Đóng modal Chi tiết sản phẩm
+  const handleCloseDetailModal = useCallback(() => {
+    setSelectedDetailProduct(null);
+    setIsDeleteConfirmOpen(false);
+    setDeleteError(null);
+  }, []);
+
   // Mở modal Thêm mới
   const handleOpenAddModal = useCallback(() => {
     setProductToEdit(null);
@@ -286,6 +336,7 @@ export function App() {
 
   // Mở modal Sửa
   const handleOpenEditModal = useCallback((prod: Product, triggerEl: HTMLElement) => {
+    setSelectedDetailProduct(null);
     setProductToEdit(prod);
     activeTriggerRef.current = triggerEl;
     setIsModalOpen(true);
@@ -297,6 +348,110 @@ export function App() {
     setProductToEdit(null);
     setIsFormDirty(false);
   }, []);
+
+  // Mở modal Xác nhận xóa mềm
+  const handleOpenDeleteConfirm = useCallback(() => {
+    setDeleteError(null);
+    setIsDeleteConfirmOpen(true);
+  }, []);
+
+  // Hủy modal Xác nhận xóa (quay về modal chi tiết)
+  const handleCancelDeleteConfirm = useCallback(() => {
+    setIsDeleteConfirmOpen(false);
+    setDeleteError(null);
+  }, []);
+
+  // Thực hiện Xóa mềm sản phẩm
+  const handleExecuteSoftDelete = useCallback(async () => {
+    if (!selectedDetailProduct || isDeleting) return;
+
+    if (!isOnline) {
+      setDeleteError('Đang mất kết nối mạng. Không thể thực hiện xóa sản phẩm lúc này.');
+      return;
+    }
+
+    setIsDeleting(true);
+    setDeleteError(null);
+
+    try {
+      const res = await softDeleteProduct(selectedDetailProduct.id);
+
+      if (res.error) {
+        setDeleteError(res.error);
+        setIsDeleting(false);
+        return;
+      }
+
+      // Xóa mềm thành công: đóng cả modal xác nhận và modal chi tiết
+      setIsDeleting(false);
+      setIsDeleteConfirmOpen(false);
+      setSelectedDetailProduct(null);
+
+      // Làm mới danh sách sản phẩm và danh sách đã xóa
+      await reloadProducts(Boolean(member?.can_edit));
+
+      showToast({
+        text: `Đã chuyển sản phẩm "${selectedDetailProduct.name}" vào mục Đã xóa.`,
+        type: 'info',
+      });
+    } catch (err) {
+      setIsDeleting(false);
+      setDeleteError(
+        err instanceof Error ? err.message : 'Lỗi kết nối khi xóa sản phẩm. Vui lòng thử lại.'
+      );
+    }
+  }, [selectedDetailProduct, isDeleting, isOnline, member, reloadProducts, showToast]);
+
+  // Mở modal danh sách sản phẩm Đã xóa
+  const handleOpenDeletedProductsModal = useCallback(async () => {
+    setIsDeletedModalOpen(true);
+    setIsDeletedLoading(true);
+    setDeletedError(null);
+
+    const res = await fetchDeletedProducts();
+    if (res.error) {
+      setDeletedError(res.error);
+    } else {
+      setDeletedProducts(res.data ?? []);
+    }
+    setIsDeletedLoading(false);
+  }, []);
+
+  // Đóng modal danh sách sản phẩm Đã xóa
+  const handleCloseDeletedProductsModal = useCallback(() => {
+    setIsDeletedModalOpen(false);
+  }, []);
+
+  // Khôi phục sản phẩm từ mục Đã xóa
+  const handleRestoreProduct = useCallback(
+    async (productToRestore: Product) => {
+      if (!isOnline) {
+        showToast({
+          text: 'Đang mất kết nối mạng. Không thể khôi phục sản phẩm lúc này.',
+          type: 'warning',
+        });
+        return;
+      }
+
+      const res = await restoreProduct(productToRestore.id);
+      if (res.error) {
+        showToast({
+          text: res.error,
+          type: 'warning',
+        });
+        return;
+      }
+
+      // Khôi phục thành công: làm mới cả 2 danh sách
+      await reloadProducts(true);
+
+      showToast({
+        text: `Đã khôi phục sản phẩm "${productToRestore.name}" thành công.`,
+        type: 'success',
+      });
+    },
+    [isOnline, reloadProducts, showToast]
+  );
 
   // Mở modal Lịch sử sản phẩm
   const handleOpenHistoryModal = useCallback((prod: Product, triggerEl: HTMLElement) => {
@@ -339,7 +494,7 @@ export function App() {
     setIsImageSearchOpen(false);
   }, []);
 
-  // Xử lý khi chọn sản phẩm từ kết quả tìm bằng ảnh: chuyển hướng xem trong danh sách, không sửa đổi dữ liệu
+  // Xử lý khi chọn sản phẩm từ kết quả tìm bằng ảnh
   const handleSelectProductFromImageSearch = useCallback((matchedProduct: Product) => {
     setSearchTerm(matchedProduct.barcode || matchedProduct.code);
     setSelectedCategory('ALL');
@@ -348,7 +503,6 @@ export function App() {
   // Xử lý sau khi lưu sản phẩm thành công
   const handleSaveSuccess = useCallback(
     (savedProduct: Product, isEdit: boolean) => {
-      // 1. Cập nhật state danh sách sản phẩm
       if (isEdit) {
         setProducts((prev) =>
           prev.map((p) => (p.id === savedProduct.id ? savedProduct : p))
@@ -357,7 +511,6 @@ export function App() {
         setProducts((prev) => [savedProduct, ...prev]);
       }
 
-      // 2. Kiểm tra xem sản phẩm có bị ẩn bởi bộ lọc hoặc từ khóa tìm kiếm hiện tại không
       const rawSearch = searchTerm.trim();
       const normalizedQuery = removeVietnameseTones(rawSearch);
       const matchesCategory =
@@ -392,7 +545,7 @@ export function App() {
     [searchTerm, selectedCategory, showToast]
   );
 
-  // Danh sách các danh mục duy nhất từ sản phẩm thực tế
+  // Danh sách các danh mục duy nhất từ sản phẩm đang sử dụng
   const categories = useMemo(() => {
     return Array.from(new Set(products.map((item) => item.category)));
   }, [products]);
@@ -477,7 +630,7 @@ export function App() {
     return <Login />;
   }
 
-  // MÀN HÌNH 4: Đang kiểm tra quyền thành viên gia đình (chỉ hiện khi chưa có thông tin member)
+  // MÀN HÌNH 4: Đang kiểm tra quyền thành viên gia đình
   if (isMemberLoading && !member) {
     return (
       <div className="status-screen-container">
@@ -489,7 +642,7 @@ export function App() {
     );
   }
 
-  // MÀN HÌNH 5: Lỗi kết nối khi kiểm tra thành viên (chỉ hiện khi chưa có thông tin member)
+  // MÀN HÌNH 5: Lỗi kết nối khi kiểm tra thành viên
   if (memberError && !member) {
     return (
       <div className="status-screen-container">
@@ -541,7 +694,7 @@ export function App() {
     );
   }
 
-  // MÀN HÌNH 7: Thành viên hợp lệ -> Hiển thị danh mục hàng hóa
+  // MÀN HÌNH 7: Thành viên hợp lệ -> Hiển thị ứng dụng Kho gia đình
   return (
     <div className="app-container">
       <div className="app-content">
@@ -577,7 +730,7 @@ export function App() {
           </div>
         )}
 
-        {/* Thông báo Toast sau khi lưu */}
+        {/* Thông báo Toast sau khi lưu / xóa / khôi phục */}
         {toast && (
           <div className={`app-toast toast-${toast.type}`} role="status" aria-live="polite">
             <span className="toast-text">{toast.text}</span>
@@ -608,7 +761,7 @@ export function App() {
             hasDisplayedData={products.length > 0}
           />
 
-          {/* Trạng thái đang tải sản phẩm (chỉ hiện panel to khi danh sách đang rỗng) */}
+          {/* Trạng thái đang tải sản phẩm */}
           {isProductsLoading && products.length === 0 && (
             <div className="state-panel loading-panel">
               <div className="loading-spinner small" aria-hidden="true"></div>
@@ -616,7 +769,7 @@ export function App() {
             </div>
           )}
 
-          {/* Trạng thái lỗi tải sản phẩm (chỉ chặn khi danh sách rỗng) */}
+          {/* Trạng thái lỗi tải sản phẩm */}
           {productsError && products.length === 0 && (
             <div className="state-panel error-panel">
               <p>{productsError}</p>
@@ -629,7 +782,7 @@ export function App() {
           {/* Khi đã có sản phẩm hoặc khi hoàn tất tải mà không có lỗi */}
           {(products.length > 0 || (!isProductsLoading && !productsError)) && (
             <>
-              {/* Chỉ hiển thị thanh tìm kiếm & lọc nếu cơ sở dữ liệu đã có ít nhất 1 sản phẩm */}
+              {/* Thanh tìm kiếm & Lọc danh mục dạng cuộn ngang */}
               {products.length > 0 && (
                 <SearchAndFilter
                   searchTerm={searchTerm}
@@ -641,17 +794,20 @@ export function App() {
                   totalCount={products.length}
                   onOpenBarcodeScanner={handleOpenBarcodeScanner}
                   onOpenImageSearch={handleOpenImageSearch}
+                  canEdit={canEdit}
+                  deletedCount={deletedProducts.length}
+                  onOpenDeletedProducts={handleOpenDeletedProductsModal}
                 />
               )}
 
+              {/* Lưới sản phẩm kiểu Shopee/Lazada 2 cột trên di động */}
               <ProductList
                 products={filteredProducts}
                 totalInDatabase={products.length}
                 onResetFilters={handleResetFilters}
                 hasFiltersApplied={hasFiltersApplied}
                 canEdit={canEdit}
-                onEdit={handleOpenEditModal}
-                onViewHistory={handleOpenHistoryModal}
+                onSelectProduct={handleSelectProduct}
                 onOpenBarcodeScanner={handleOpenBarcodeScanner}
                 onOpenImageSearch={handleOpenImageSearch}
                 onOpenAddModal={handleOpenAddModal}
@@ -661,9 +817,50 @@ export function App() {
         </main>
 
         <footer className="app-footer">
-          <p>Family Inventory • Ứng dụng nội bộ gia đình</p>
+          <p>Kho gia đình • Quản lý hàng hóa và kho nội bộ gia đình</p>
         </footer>
       </div>
+
+      {/* Modal Chi tiết sản phẩm (khi bấm vào bất kỳ thẻ sản phẩm nào) */}
+      {selectedDetailProduct && (
+        <ProductDetailModal
+          isOpen={Boolean(selectedDetailProduct)}
+          product={selectedDetailProduct}
+          canEdit={canEdit}
+          onClose={handleCloseDetailModal}
+          onEdit={(prod, triggerEl) => handleOpenEditModal(prod, triggerEl)}
+          onViewHistory={(prod, triggerEl) => handleOpenHistoryModal(prod, triggerEl)}
+          onOpenDeleteConfirm={handleOpenDeleteConfirm}
+          triggerElementRef={detailTriggerRef}
+        />
+      )}
+
+      {/* Modal Hộp thoại xác nhận Xóa mềm sản phẩm */}
+      {isDeleteConfirmOpen && selectedDetailProduct && (
+        <ProductDeleteConfirmModal
+          isOpen={isDeleteConfirmOpen}
+          product={selectedDetailProduct}
+          onCancel={handleCancelDeleteConfirm}
+          onConfirm={handleExecuteSoftDelete}
+          isDeleting={isDeleting}
+          error={deleteError}
+          isOnline={isOnline}
+        />
+      )}
+
+      {/* Modal Quản lý mục "Đã xóa" dành cho thành viên có quyền can_edit */}
+      {isDeletedModalOpen && (
+        <DeletedProductsModal
+          isOpen={isDeletedModalOpen}
+          onClose={handleCloseDeletedProductsModal}
+          deletedProducts={deletedProducts}
+          isLoading={isDeletedLoading}
+          error={deletedError}
+          onRestore={handleRestoreProduct}
+          onRetry={handleOpenDeletedProductsModal}
+          isOnline={isOnline}
+        />
+      )}
 
       {/* Modal Thêm / Chỉnh sửa sản phẩm */}
       <ProductFormModal

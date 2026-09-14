@@ -92,8 +92,119 @@ function parseSupabaseError(error: { code?: string; message: string; details?: s
   }
 
   return {
-    message: error.message || 'Đã xảy ra lỗi không xác định khi lưu sản phẩm.',
+    message: error.message || 'Đã xảy ra lỗi không xác định khi thao tác dữ liệu.',
   };
+}
+
+/**
+ * Kiểm tra xem mã hàng hoặc mã vạch có đang thuộc về một sản phẩm trong mục "Đã xóa" không
+ */
+export async function checkExistingDeletedDuplicate(
+  code: string,
+  barcode?: string | null
+): Promise<{ inTrash: boolean; field?: 'code' | 'barcode'; productName?: string }> {
+  if (!supabase) return { inTrash: false };
+
+  try {
+    // 1. Kiểm tra trùng code trong mục Đã xóa
+    const trimmedCode = code.trim();
+    if (trimmedCode) {
+      const { data: codeMatch } = await supabase
+        .from('products')
+        .select('name, code')
+        .eq('code', trimmedCode)
+        .not('deleted_at', 'is', null)
+        .maybeSingle();
+
+      if (codeMatch) {
+        return {
+          inTrash: true,
+          field: 'code',
+          productName: codeMatch.name,
+        };
+      }
+    }
+
+    // 2. Kiểm tra trùng barcode trong mục Đã xóa
+    const trimmedBarcode = barcode?.trim();
+    if (trimmedBarcode) {
+      const { data: barcodeMatch } = await supabase
+        .from('products')
+        .select('name, barcode')
+        .eq('barcode', trimmedBarcode)
+        .not('deleted_at', 'is', null)
+        .maybeSingle();
+
+      if (barcodeMatch) {
+        return {
+          inTrash: true,
+          field: 'barcode',
+          productName: barcodeMatch.name,
+        };
+      }
+    }
+  } catch {
+    // Bỏ qua lỗi truy vấn phụ trợ
+  }
+
+  return { inTrash: false };
+}
+
+/**
+ * Lấy danh sách sản phẩm đang sử dụng (deleted_at IS NULL)
+ */
+export async function fetchActiveProducts(): Promise<ServiceResult<Product[]>> {
+  if (!supabase) {
+    return { data: null, error: 'Chưa cấu hình kết nối Supabase.' };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      const parsed = parseSupabaseError(error);
+      return { data: null, error: parsed.message };
+    }
+
+    const products = ((data as ProductRow[]) ?? []).map(mapProductRow);
+    return { data: products, error: null };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Lỗi kết nối khi tải danh sách sản phẩm.';
+    return { data: null, error: message };
+  }
+}
+
+/**
+ * Lấy danh sách sản phẩm đã xóa mềm (deleted_at IS NOT NULL)
+ * Chỉ tài khoản có quyền can_edit mới được phép đọc theo chính sách RLS
+ */
+export async function fetchDeletedProducts(): Promise<ServiceResult<Product[]>> {
+  if (!supabase) {
+    return { data: null, error: 'Chưa cấu hình kết nối Supabase.' };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false });
+
+    if (error) {
+      const parsed = parseSupabaseError(error);
+      return { data: null, error: parsed.message };
+    }
+
+    const products = ((data as ProductRow[]) ?? []).map(mapProductRow);
+    return { data: products, error: null };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Lỗi kết nối khi tải danh sách sản phẩm đã xóa.';
+    return { data: null, error: message };
+  }
 }
 
 /**
@@ -115,6 +226,7 @@ export async function createProduct(input: CreateProductInput): Promise<ServiceR
     sale_price: input.salePrice,
     stock: input.stock,
     notes: input.notes ? input.notes.trim() : '',
+    deleted_at: null,
   };
 
   try {
@@ -126,6 +238,20 @@ export async function createProduct(input: CreateProductInput): Promise<ServiceR
 
     if (error) {
       const parsed = parseSupabaseError(error);
+
+      // Nếu vi phạm unique constraint, kiểm tra xem có đang trùng với sản phẩm trong mục Đã xóa không
+      if (parsed.duplicateField) {
+        const trashCheck = await checkExistingDeletedDuplicate(payload.code, payload.barcode);
+        if (trashCheck.inTrash) {
+          const fieldName = trashCheck.field === 'code' ? 'Mã hàng' : 'Mã vạch';
+          return {
+            data: null,
+            error: `${fieldName} này đang thuộc về sản phẩm "${trashCheck.productName}" trong mục Đã xóa. Bạn có thể vào mục Đã xóa để khôi phục hoặc sử dụng mã khác.`,
+            duplicateField: trashCheck.field,
+          };
+        }
+      }
+
       return { data: null, error: parsed.message, duplicateField: parsed.duplicateField };
     }
 
@@ -142,7 +268,6 @@ export async function createProduct(input: CreateProductInput): Promise<ServiceR
 
 /**
  * Cập nhật sản phẩm bằng lệnh UPDATE theo ID
- * Tuyệt đối không gửi id, created_at, updated_at trong payload
  */
 export async function updateProduct(
   id: string,
@@ -152,7 +277,6 @@ export async function updateProduct(
     return { data: null, error: 'Chưa cấu hình kết nối Supabase.' };
   }
 
-  // Chỉ gửi các trường nghiệp vụ được phép sửa; giữ nguyên image_url đang có
   const payload: Record<string, unknown> = {
     code: input.code.trim(),
     barcode: input.barcode && input.barcode.trim() !== '' ? input.barcode.trim() : null,
@@ -174,19 +298,35 @@ export async function updateProduct(
       .from('products')
       .update(payload)
       .eq('id', id)
+      .is('deleted_at', null)
       .select()
       .maybeSingle();
 
     if (error) {
       const parsed = parseSupabaseError(error);
+
+      if (parsed.duplicateField) {
+        const trashCheck = await checkExistingDeletedDuplicate(
+          String(payload.code),
+          payload.barcode ? String(payload.barcode) : null
+        );
+        if (trashCheck.inTrash) {
+          const fieldName = trashCheck.field === 'code' ? 'Mã hàng' : 'Mã vạch';
+          return {
+            data: null,
+            error: `${fieldName} này đang thuộc về sản phẩm "${trashCheck.productName}" trong mục Đã xóa. Bạn có thể vào mục Đã xóa để khôi phục hoặc sử dụng mã khác.`,
+            duplicateField: trashCheck.field,
+          };
+        }
+      }
+
       return { data: null, error: parsed.message, duplicateField: parsed.duplicateField };
     }
 
-    // UPDATE không trả về dòng phải coi là chưa lưu thành công (ví dụ bị RLS chặn hoặc ID không tồn tại)
     if (!data) {
       return {
         data: null,
-        error: 'Cập nhật không thành công. Sản phẩm không tồn tại hoặc bạn không có quyền chỉnh sửa.',
+        error: 'Cập nhật không thành công. Sản phẩm không tồn tại, đã bị xóa hoặc bạn không có quyền chỉnh sửa.',
       };
     }
 
@@ -198,8 +338,84 @@ export async function updateProduct(
 }
 
 /**
+ * Xóa mềm sản phẩm (chuyển vào mục "Đã xóa")
+ * Đặt deleted_at = now(). Chỉ áp dụng với sản phẩm đang sử dụng (deleted_at IS NULL).
+ */
+export async function softDeleteProduct(id: string): Promise<ServiceResult<Product>> {
+  if (!supabase) {
+    return { data: null, error: 'Chưa cấu hình kết nối Supabase.' };
+  }
+
+  try {
+    const nowIso = new Date().toISOString();
+    const { data, error } = await supabase
+      .from('products')
+      .update({ deleted_at: nowIso })
+      .eq('id', id)
+      .is('deleted_at', null)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      const parsed = parseSupabaseError(error);
+      return { data: null, error: parsed.message };
+    }
+
+    // Nếu không có dòng nào được cập nhật:
+    if (!data) {
+      return {
+        data: null,
+        error: 'Không thể xóa sản phẩm. Sản phẩm không tồn tại, đã được chuyển vào mục Đã xóa trước đó hoặc bạn không có quyền thực hiện.',
+      };
+    }
+
+    return { data: mapProductRow(data as ProductRow), error: null };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Lỗi kết nối khi xóa sản phẩm.';
+    return { data: null, error: message };
+  }
+}
+
+/**
+ * Khôi phục sản phẩm từ mục "Đã xóa"
+ * Đặt deleted_at = null. Chỉ áp dụng với sản phẩm đã bị xóa (deleted_at IS NOT NULL).
+ */
+export async function restoreProduct(id: string): Promise<ServiceResult<Product>> {
+  if (!supabase) {
+    return { data: null, error: 'Chưa cấu hình kết nối Supabase.' };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .update({ deleted_at: null })
+      .eq('id', id)
+      .not('deleted_at', 'is', null)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      const parsed = parseSupabaseError(error);
+      return { data: null, error: parsed.message };
+    }
+
+    if (!data) {
+      return {
+        data: null,
+        error: 'Không thể khôi phục sản phẩm. Sản phẩm không tồn tại, chưa từng bị xóa hoặc bạn không có quyền thực hiện.',
+      };
+    }
+
+    return { data: mapProductRow(data as ProductRow), error: null };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Lỗi kết nối khi khôi phục sản phẩm.';
+    return { data: null, error: message };
+  }
+}
+
+/**
  * Tìm kiếm sản phẩm theo mã vạch khớp chính xác từ Supabase public.products
- * Bảo toàn định dạng chuỗi, không ép kiểu số và giữ nguyên các số 0 ở đầu
+ * Chỉ tìm kiếm trong các sản phẩm đang sử dụng (deleted_at IS NULL).
  */
 export async function findProductByBarcode(
   rawBarcode: string
@@ -218,6 +434,7 @@ export async function findProductByBarcode(
       .from('products')
       .select('*')
       .eq('barcode', barcode)
+      .is('deleted_at', null)
       .maybeSingle();
 
     if (error) {
@@ -225,7 +442,6 @@ export async function findProductByBarcode(
       return { data: null, error: parsed.message };
     }
 
-    // Không tìm thấy sản phẩm trong cơ sở dữ liệu (data = null, error = null)
     if (!data) {
       return { data: null, error: null };
     }
@@ -237,4 +453,3 @@ export async function findProductByBarcode(
     return { data: null, error: message };
   }
 }
-

@@ -63,6 +63,7 @@ Deno.serve(async (req: Request) => {
     const { data: productsData, error: productsError } = await userClient
       .from('products')
       .select('id, code, barcode, name, category, unit, image_url, purchase_price, sale_price, stock, notes')
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(MAX_SUPPORTED_PRODUCTS + 1);
 

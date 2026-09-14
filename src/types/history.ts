@@ -1,4 +1,4 @@
-export type ProductHistoryAction = 'create' | 'update';
+export type ProductHistoryAction = 'create' | 'update' | 'delete' | 'restore';
 
 export interface ProductSnapshot {
   code?: string;
@@ -11,6 +11,7 @@ export interface ProductSnapshot {
   sale_price?: number | string;
   stock?: number | string;
   notes?: string;
+  deleted_at?: string | null;
 }
 
 export interface ProductHistoryRow {
@@ -38,10 +39,19 @@ export interface ProductHistoryEntry {
 }
 
 export function mapProductHistoryRow(row: ProductHistoryRow): ProductHistoryEntry {
+  let action: ProductHistoryAction = 'update';
+  if (row.action === 'create') {
+    action = 'create';
+  } else if (row.action === 'delete') {
+    action = 'delete';
+  } else if (row.action === 'restore') {
+    action = 'restore';
+  }
+
   return {
     id: row.id,
     productId: row.product_id,
-    action: row.action === 'create' ? 'create' : 'update',
+    action,
     actorId: row.actor_id,
     actorName: row.actor_name,
     changedAt: row.changed_at,

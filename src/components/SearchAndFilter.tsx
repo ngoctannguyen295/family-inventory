@@ -10,6 +10,9 @@ interface SearchAndFilterProps {
   totalCount: number;
   onOpenBarcodeScanner?: (triggerEl: HTMLElement) => void;
   onOpenImageSearch?: (triggerEl: HTMLElement) => void;
+  canEdit?: boolean;
+  deletedCount?: number;
+  onOpenDeletedProducts?: () => void;
 }
 
 export function SearchAndFilter({
@@ -22,6 +25,9 @@ export function SearchAndFilter({
   totalCount,
   onOpenBarcodeScanner,
   onOpenImageSearch,
+  canEdit,
+  deletedCount = 0,
+  onOpenDeletedProducts,
 }: SearchAndFilterProps) {
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     onSearchChange(e.target.value);
@@ -33,131 +39,63 @@ export function SearchAndFilter({
 
   return (
     <section className="search-filter-section" aria-label="Bộ lọc và tìm kiếm sản phẩm">
-      <div className="search-filter-grid">
-        {/* Search Input & Barcode Button */}
-        <div className="form-group search-group">
-          <label htmlFor="search-input" className="form-label">
-            Tìm kiếm theo tên, mã hàng, mã vạch
-          </label>
-          <div className="search-input-actions-row">
-            <div className="input-with-icon search-input-container">
-              <svg
-                className="search-icon"
-                xmlns="http://www.w3.org/2000/svg"
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg>
-              <input
-                id="search-input"
-                type="search"
-                className="text-input"
-                placeholder="Ví dụ: gạo, 00101, 8935..."
-                value={searchTerm}
-                onChange={handleInputChange}
-                autoComplete="off"
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  className="clear-button"
-                  onClick={handleClearSearch}
-                  aria-label="Xóa từ khóa tìm kiếm"
-                  title="Xóa từ khóa"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-
-            {onOpenBarcodeScanner && (
-              <button
-                type="button"
-                className="btn-scan-barcode"
-                onClick={(e) => onOpenBarcodeScanner(e.currentTarget)}
-                title="Quét mã vạch bằng camera hoặc ảnh"
-                aria-label="Mở cửa sổ quét mã vạch"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" />
-                </svg>
-                <span>Quét mã</span>
-              </button>
-            )}
-
-            {onOpenImageSearch && (
-              <button
-                type="button"
-                className="btn-search-image"
-                onClick={(e) => onOpenImageSearch(e.currentTarget)}
-                title="Tìm sản phẩm bằng ảnh bao bì qua AI"
-                aria-label="Mở cửa sổ tìm sản phẩm bằng ảnh bao bì"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                  <circle cx="12" cy="13" r="4" />
-                </svg>
-                <span>Tìm bằng ảnh</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Category Select Filter */}
-        <div className="form-group category-group">
-          <label htmlFor="category-select" className="form-label">
-            Lọc theo danh mục
-          </label>
-          <div className="select-wrapper">
-            <select
-              id="category-select"
-              className="select-input"
-              value={selectedCategory}
-              onChange={(e) => onCategoryChange(e.target.value)}
+      {/* 1. Ô tìm kiếm full-width */}
+      <div className="search-input-fullwidth-container">
+        <div className="input-with-icon search-input-box">
+          <svg
+            className="search-icon"
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input
+            id="search-input"
+            type="search"
+            className="text-input modern-search-input"
+            placeholder="Tìm theo tên sản phẩm, mã hàng, mã vạch..."
+            value={searchTerm}
+            onChange={handleInputChange}
+            autoComplete="off"
+            aria-label="Tìm kiếm sản phẩm"
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              className="clear-button search-clear-btn"
+              onClick={handleClearSearch}
+              aria-label="Xóa từ khóa tìm kiếm"
+              title="Xóa từ khóa"
             >
-              <option value="ALL">Tất cả danh mục ({totalCount})</option>
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 2. Hai nút lớn Quét mã và Tìm bằng ảnh (chiều cao >= 44px, trải đều) */}
+      <div className="search-quick-actions-bar">
+        {onOpenBarcodeScanner && (
+          <button
+            type="button"
+            className="btn-large-scanner btn-barcode-large"
+            onClick={(e) => onOpenBarcodeScanner(e.currentTarget)}
+            title="Quét mã vạch bao bì"
+            aria-label="Mở máy quét mã vạch bằng camera"
+          >
             <svg
-              className="select-chevron"
               xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
+              width="22"
+              height="22"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -166,13 +104,77 @@ export function SearchAndFilter({
               strokeLinejoin="round"
               aria-hidden="true"
             >
-              <polyline points="6 9 12 15 18 9"></polyline>
+              <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" />
             </svg>
-          </div>
+            <span className="btn-label-text">Quét mã vạch</span>
+          </button>
+        )}
+
+        {onOpenImageSearch && (
+          <button
+            type="button"
+            className="btn-large-scanner btn-ai-image-large"
+            onClick={(e) => onOpenImageSearch(e.currentTarget)}
+            title="Tìm sản phẩm bằng ảnh chụp bao bì qua AI"
+            aria-label="Tìm sản phẩm bằng ảnh chụp bao bì qua AI"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+              <circle cx="12" cy="13" r="4" />
+            </svg>
+            <span className="btn-label-text">Tìm bằng ảnh AI</span>
+          </button>
+        )}
+      </div>
+
+      {/* 3. Thanh danh mục dạng nút cuộn ngang (Horizontal scrollable pills) */}
+      <div className="category-scroll-wrapper" role="region" aria-label="Lọc theo danh mục">
+        <div className="category-pills-container">
+          <button
+            type="button"
+            className={`category-pill ${selectedCategory === 'ALL' ? 'is-active' : ''}`}
+            onClick={() => onCategoryChange('ALL')}
+          >
+            Tất cả ({totalCount})
+          </button>
+
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              className={`category-pill ${selectedCategory === cat ? 'is-active' : ''}`}
+              onClick={() => onCategoryChange(cat)}
+            >
+              {cat}
+            </button>
+          ))}
+
+          {/* Nút vào mục Đã xóa dành cho người có quyền can_edit */}
+          {canEdit && onOpenDeletedProducts && (
+            <button
+              type="button"
+              className="category-pill trash-pill"
+              onClick={onOpenDeletedProducts}
+              title="Xem danh sách các sản phẩm đã xóa mềm"
+            >
+              🗑️ Đã xóa ({deletedCount})
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Results Count Bar */}
+      {/* 4. Dòng trạng thái tóm tắt kết quả */}
       <div className="results-summary" role="status" aria-live="polite">
         <span className="results-text">
           Hiển thị <strong>{displayedCount}</strong> / <strong>{totalCount}</strong> sản phẩm
@@ -186,3 +188,5 @@ export function SearchAndFilter({
     </section>
   );
 }
+
+export default SearchAndFilter;

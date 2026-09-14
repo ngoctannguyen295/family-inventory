@@ -7,8 +7,7 @@ interface ProductListProps {
   onResetFilters: () => void;
   hasFiltersApplied: boolean;
   canEdit?: boolean;
-  onEdit?: (product: Product, triggerEl: HTMLElement) => void;
-  onViewHistory?: (product: Product, triggerEl: HTMLElement) => void;
+  onSelectProduct: (product: Product, triggerEl: HTMLElement) => void;
   onOpenBarcodeScanner?: (triggerEl: HTMLElement) => void;
   onOpenImageSearch?: (triggerEl: HTMLElement) => void;
   onOpenAddModal?: () => void;
@@ -20,8 +19,7 @@ export function ProductList({
   onResetFilters,
   hasFiltersApplied,
   canEdit,
-  onEdit,
-  onViewHistory,
+  onSelectProduct,
   onOpenBarcodeScanner,
   onOpenImageSearch,
   onOpenAddModal,
@@ -49,7 +47,7 @@ export function ProductList({
         </div>
         <h3 className="empty-title">Chưa có sản phẩm</h3>
         <p className="empty-description">
-          Cơ sở dữ liệu kho hàng gia đình hiện chưa có mặt hàng nào. Các sản phẩm được tạo trong hệ thống sẽ xuất hiện tại đây.
+          Kho hàng gia đình hiện chưa có mặt hàng nào. Các sản phẩm được tạo trong hệ thống sẽ xuất hiện tại đây.
         </p>
         <div className="empty-actions-row">
           {canEdit && onOpenAddModal && (
@@ -81,7 +79,7 @@ export function ProductList({
               >
                 <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" />
               </svg>
-              <span>Quét mã vạch tra cứu</span>
+              <span>Quét mã vạch</span>
             </button>
           )}
           {onOpenImageSearch && (
@@ -206,11 +204,11 @@ export function ProductList({
         <ProductCard
           key={product.id}
           product={product}
-          canEdit={canEdit}
-          onEdit={onEdit}
-          onViewHistory={onViewHistory}
+          onClick={onSelectProduct}
         />
       ))}
     </div>
   );
 }
+
+export default ProductList;

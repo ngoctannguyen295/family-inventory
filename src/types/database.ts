@@ -20,6 +20,7 @@ export interface ProductRow {
   sale_price: number | string;
   stock: number | string;
   notes: string;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -37,5 +38,6 @@ export function mapProductRow(row: ProductRow): Product {
     salePrice: Number(row.sale_price),
     stock: Number(row.stock),
     notes: row.notes,
+    deletedAt: row.deleted_at || null,
   };
 }
