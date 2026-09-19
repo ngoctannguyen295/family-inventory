@@ -15,10 +15,12 @@ import { ProductFormModal } from './components/ProductFormModal';
 import { ProductHistoryModal } from './components/ProductHistoryModal';
 import { BarcodeScannerModal } from './components/BarcodeScannerModal';
 import { ImageSearchModal } from './components/ImageSearchModal';
+import { VisualSearchTestModal } from './components/VisualSearchTestModal';
 import { OfflineBanner } from './components/OfflineBanner';
 import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { clearProductImageCache } from './services/storageService';
+import { syncBatchEmbeddings } from './services/aiSearchService';
 import {
   fetchActiveProducts,
   fetchDeletedProducts,
@@ -94,6 +96,9 @@ export function App() {
   // 5.6 Quản lý modal Tìm kiếm bằng ảnh bao bì qua AI
   const [isImageSearchOpen, setIsImageSearchOpen] = useState(false);
   const imageSearchTriggerRef = useRef<HTMLElement | null>(null);
+
+  // 5.7 Quản lý modal Kiểm thử 6 kịch bản Visual Search
+  const [isAiTestModalOpen, setIsAiTestModalOpen] = useState(false);
 
   // 6. Thông báo Toast
   const [toast, setToast] = useState<ToastNotification | null>(null);
@@ -599,6 +604,32 @@ export function App() {
   // Quyền chỉnh sửa của người dùng
   const canEdit = Boolean(member?.is_active && member?.can_edit);
 
+  // Xử lý đồng bộ vector đặc trưng ảnh theo batch có kiểm soát
+  const [isSyncingAi, setIsSyncingAi] = useState(false);
+  const handleSyncAi = useCallback(async () => {
+    if (isSyncingAi) return;
+    setIsSyncingAi(true);
+    showToast({ text: 'Đang kiểm tra và trích xuất đặc trưng ảnh...', type: 'info' });
+    try {
+      const res = await syncBatchEmbeddings();
+      if (res.success) {
+        showToast({
+          text: res.message,
+          type: res.syncedCount && res.syncedCount > 0 ? 'success' : 'info',
+        });
+      } else {
+        showToast({
+          text: `Đồng bộ thất bại: ${res.message}`,
+          type: 'warning',
+        });
+      }
+    } catch {
+      showToast({ text: 'Lỗi khi đồng bộ đặc trưng ảnh.', type: 'warning' });
+    } finally {
+      setIsSyncingAi(false);
+    }
+  }, [isSyncingAi, showToast]);
+
   // MÀN HÌNH 1: Thiếu cấu hình Supabase
   if (!isSupabaseConfigured) {
     return (
@@ -800,6 +831,8 @@ export function App() {
                   canEdit={canEdit}
                   deletedCount={deletedProducts.length}
                   onOpenDeletedProducts={handleOpenDeletedProductsModal}
+                  onSyncAi={handleSyncAi}
+                  isSyncingAi={isSyncingAi}
                 />
               )}
 
@@ -821,6 +854,27 @@ export function App() {
 
         <footer className="app-footer">
           <p>Kho gia đình • Quản lý hàng hóa và kho nội bộ gia đình</p>
+          {canEdit && (
+            <div style={{ marginTop: '8px' }}>
+              <button
+                type="button"
+                id="btn-admin-visual-test"
+                onClick={() => setIsAiTestModalOpen(true)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#64748b',
+                  fontSize: '0.75rem',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  padding: '4px 8px',
+                }}
+                title="Khu vực kiểm định kỹ thuật dành riêng cho Biên tập viên"
+              >
+                ⚙️ Công cụ kiểm thử Visual Search (Admin)
+              </button>
+            </div>
+          )}
         </footer>
       </div>
 
@@ -906,6 +960,15 @@ export function App() {
           onSelectProduct={handleSelectProductFromImageSearch}
           triggerElementRef={imageSearchTriggerRef}
           isOnline={isOnline}
+        />
+      )}
+
+      {/* Modal Kiểm thử 6 kịch bản Visual Search */}
+      {isAiTestModalOpen && (
+        <VisualSearchTestModal
+          isOpen={isAiTestModalOpen}
+          onClose={() => setIsAiTestModalOpen(false)}
+          onSuccessReload={reloadProducts}
         />
       )}
 

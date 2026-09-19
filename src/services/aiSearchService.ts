@@ -232,3 +232,107 @@ export async function searchProductByImage(
     };
   }
 }
+
+/**
+ * Yêu cầu Edge Function đồng bộ vector embedding cho các sản phẩm trong kho chưa có vector
+ */
+export async function syncAllProductEmbeddings(): Promise<{
+  success: boolean;
+  message: string;
+  syncedCount?: number;
+  totalPending?: number;
+}> {
+  return syncBatchEmbeddings();
+}
+
+export interface TestEmbeddingResult {
+  success: boolean;
+  model?: string;
+  dimensions?: number;
+  durationMs?: number;
+  error?: string;
+}
+
+/**
+ * Kiểm tra xác minh model embedding thực tế qua một request sống
+ */
+export async function testVisualEmbedding(text?: string): Promise<TestEmbeddingResult> {
+  if (!supabase) {
+    return { success: false, error: 'Chưa cấu hình Supabase Client.' };
+  }
+  try {
+    const { data, error } = await supabase.functions.invoke('search-product-image', {
+      body: { action: 'test-embedding', text },
+    });
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return {
+      success: Boolean(data?.success),
+      model: data?.model,
+      dimensions: data?.dimensions,
+      durationMs: data?.duration_ms,
+      error: data?.error,
+    };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export interface SyncBatchResult {
+  success: boolean;
+  message: string;
+  batchProcessed?: number;
+  syncedCount?: number;
+  failedCount?: number;
+  remainingPending?: number;
+  logs?: Array<{ id: string; name: string; has_image: boolean; success: boolean; visual_source: string; error?: string }>;
+}
+
+/**
+ * Đồng bộ một batch (tối đa 5 sản phẩm) với trích xuất ảnh Storage và khóa chống trùng lặp
+ */
+export async function syncBatchEmbeddings(): Promise<SyncBatchResult> {
+  if (!supabase) {
+    return { success: false, message: 'Chưa cấu hình Supabase Client.' };
+  }
+  try {
+    const { data, error } = await supabase.functions.invoke('search-product-image', {
+      body: { action: 'sync-batch-embeddings' },
+    });
+    if (error) {
+      return { success: false, message: error.message || 'Lỗi khi đồng bộ vector.' };
+    }
+    return {
+      success: Boolean(data?.success),
+      message: data?.message || 'Đã xử lý batch đồng bộ.',
+      batchProcessed: data?.batch_processed,
+      syncedCount: data?.synced_count,
+      failedCount: data?.failed_count,
+      remainingPending: data?.remaining_pending,
+      logs: data?.logs,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : 'Lỗi kết nối khi đồng bộ vector.',
+    };
+  }
+}
+
+// Hỗ trợ kiểm thử thực nghiệm trực tiếp từ ngữ cảnh ứng dụng đã đăng nhập
+if (typeof window !== 'undefined') {
+  (window as unknown as Record<string, unknown>).__aiSearchTest = {
+    testVisualEmbedding,
+    syncBatchEmbeddings,
+    searchProductByImage,
+  };
+}
+
+import('../utils/visualSearchTestRunner').then(({ runVisualSearchScenarios }) => {
+  if (typeof window !== 'undefined') {
+    (window as unknown as Record<string, unknown>).__runVisualSearchSuite = runVisualSearchScenarios;
+  }
+});
+
+

@@ -8,6 +8,10 @@ export interface GeminiExtraction {
   quantity_unit: string | null;
   visible_text: string[];
   readable: boolean;
+  object_type?: string | null;
+  visual_features?: string | null;
+  visual_signature?: string | null;
+  category_hint?: string | null;
 }
 
 export interface ProductRecord {
@@ -28,6 +32,7 @@ export interface ProductMatchResult {
   product: ProductRecord;
   match_score: number;
   match_reasons: string[];
+  vector_similarity?: number;
 }
 
 export interface QuotaCheckResult {
@@ -63,5 +68,6 @@ export interface ApiResponse<T = unknown> {
     remaining_day: number;
   };
   timing?: TimingMetadata;
+  visual_search_warning?: string;
   data?: T;
 }

@@ -9,6 +9,7 @@ import {
 } from '../services/productService';
 import { validateImageFile, uploadProductImage } from '../services/storageService';
 import { ProductImage } from './ProductImage';
+import './ProductFormModal.css';
 
 interface ProductFormModalProps {
   isOpen: boolean;
@@ -216,14 +217,8 @@ function ProductFormDialog({
     };
   }, [previewUrl]);
 
-  // Tham chiếu focus
+  // Tham chiếu modal dialog
   const modalRef = useRef<HTMLDivElement>(null);
-  const firstInputRef = useRef<HTMLInputElement>(null);
-
-  // Focus ô đầu tiên khi mở modal
-  useEffect(() => {
-    firstInputRef.current?.focus();
-  }, []);
 
   // Xử lý khi người dùng chọn file ảnh từ máy
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -549,25 +544,26 @@ function ProductFormDialog({
 
   return (
     <div
-      className="modal-backdrop"
+      className="pf-modal-backdrop"
       onClick={handleBackdropClick}
       onKeyDown={handleKeyDown}
       role="presentation"
     >
       <div
         ref={modalRef}
-        className="modal-content"
+        className="pf-modal-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="modal-header">
-          <div>
-            <h2 id="modal-title" className="modal-title">
+        {/* Header modal */}
+        <div className="pf-modal-header">
+          <div className="pf-modal-title-group">
+            <h2 id="modal-title" className="pf-modal-title">
               {isEdit ? 'Chỉnh sửa sản phẩm' : 'Thêm sản phẩm mới'}
             </h2>
-            <p className="modal-subtitle">
+            <p className="pf-modal-subtitle">
               {isEdit
                 ? 'Cập nhật thông tin chi tiết và số lượng tồn kho'
                 : 'Nhập thông tin mặt hàng mới vào cơ sở dữ liệu gia đình'}
@@ -575,7 +571,7 @@ function ProductFormDialog({
           </div>
           <button
             type="button"
-            className="modal-close-btn"
+            className="pf-modal-close-btn"
             onClick={handleClose}
             disabled={isSubmitting}
             aria-label="Đóng cửa sổ"
@@ -584,354 +580,399 @@ function ProductFormDialog({
           </button>
         </div>
 
-        {formError && (
-          <div className="modal-alert-error" role="alert">
-            <svg
-              className="alert-icon"
-              xmlns="http://www.w3.org/2000/svg"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="8" x2="12" y2="12"></line>
-              <line x1="12" y1="16" x2="12.01" y2="16"></line>
-            </svg>
-            <span>{formError}</span>
-          </div>
-        )}
+        {/* Nội dung form cuộn dọc mượt mà */}
+        <form className="pf-modal-body" onSubmit={handleSubmit} noValidate>
+          {formError && (
+            <div className="pf-alert pf-alert-error" role="alert">
+              <svg
+                className="pf-alert-icon"
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              <span>{formError}</span>
+            </div>
+          )}
 
-        {isSellingAtLoss && (
-          <div className="modal-alert-warning" role="alert">
-            <svg
-              className="alert-icon"
-              xmlns="http://www.w3.org/2000/svg"
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
-              <line x1="12" y1="9" x2="12" y2="13"></line>
-              <line x1="12" y1="17" x2="12.01" y2="17"></line>
-            </svg>
-            <span>
-              <strong>Lưu ý:</strong> Giá bán đang thấp hơn giá nhập (bán lỗ). Bạn vẫn có thể lưu nếu đây là chủ đích.
-            </span>
-          </div>
-        )}
+          {isSellingAtLoss && (
+            <div className="pf-alert pf-alert-warning" role="alert">
+              <svg
+                className="pf-alert-icon"
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
+                <line x1="12" y1="9" x2="12" y2="13"></line>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+              <span>
+                <strong>Lưu ý:</strong> Giá bán đang thấp hơn giá nhập (bán lỗ). Bạn vẫn có thể lưu nếu đây là chủ đích.
+              </span>
+            </div>
+          )}
 
-        <form className="modal-form" onSubmit={handleSubmit} noValidate>
-          {/* Ảnh sản phẩm */}
-          <div className="form-group image-upload-group">
-            <label className="form-label">
-              Ảnh sản phẩm (không bắt buộc)
-            </label>
-            <div className="image-upload-box">
-              <div className="image-preview-container">
-                {previewUrl ? (
-                  <img
-                    src={previewUrl}
-                    alt="Xem trước ảnh sản phẩm mới"
-                    className="image-preview-thumbnail"
-                  />
-                ) : isEdit && productToEdit?.imageUrl ? (
-                  <ProductImage
-                    storagePath={productToEdit.imageUrl}
-                    alt={productToEdit.name}
-                    className="image-preview-thumbnail"
-                  />
-                ) : (
-                  <img
-                    src="/products/default-placeholder.svg"
-                    alt="Chưa có ảnh sản phẩm"
-                    className="image-preview-thumbnail"
-                  />
-                )}
-              </div>
-
-              <div className="image-upload-content">
-                <input
-                  ref={fileInputRef}
-                  id="product-image-file"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={handleFileChange}
-                  disabled={isSubmitting}
-                  style={{ display: 'none' }}
-                />
-
-                <div className="image-upload-buttons">
-                  <button
-                    type="button"
-                    className="btn-upload-trigger"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isSubmitting}
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="15"
-                      height="15"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden="true"
-                    >
-                      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-                      <circle cx="9" cy="9" r="2" />
-                      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-                    </svg>
-                    {selectedFile
-                      ? 'Đổi ảnh khác'
-                      : isEdit && productToEdit?.imageUrl
-                      ? 'Thay ảnh mới'
-                      : 'Chọn ảnh từ máy'}
-                  </button>
-
-                  {selectedFile && (
-                    <button
-                      type="button"
-                      className="btn-clear-image"
-                      onClick={handleClearSelectedFile}
-                      disabled={isSubmitting}
-                    >
-                      ✕ Bỏ ảnh vừa chọn
-                    </button>
+          {/* Vùng Ảnh sản phẩm */}
+          <div className="pf-section">
+            <div className="pf-field">
+              <label className="pf-label">
+                Ảnh sản phẩm <span className="pf-optional-tag">(không bắt buộc)</span>
+              </label>
+              <div className="pf-image-card">
+                <div className="pf-image-thumb-box">
+                  {previewUrl ? (
+                    <img
+                      src={previewUrl}
+                      alt="Xem trước ảnh sản phẩm mới"
+                      className="pf-image-thumb"
+                    />
+                  ) : isEdit && productToEdit?.imageUrl ? (
+                    <ProductImage
+                      storagePath={productToEdit.imageUrl}
+                      alt={productToEdit.name}
+                      className="pf-image-thumb"
+                    />
+                  ) : (
+                    <img
+                      src="/products/default-placeholder.svg"
+                      alt="Chưa có ảnh sản phẩm"
+                      className="pf-image-thumb"
+                    />
                   )}
                 </div>
 
-                {selectedFile ? (
-                  <span className="image-file-details" title={selectedFile.name}>
-                    Đã chọn: <strong>{selectedFile.name}</strong> ({(selectedFile.size / 1024).toFixed(0)} KB)
-                  </span>
-                ) : (
-                  <span className="image-format-hint">
-                    Hỗ trợ JPG, PNG, WebP (tối đa 5 MB). {isEdit && productToEdit?.imageUrl ? 'Để nguyên nếu muốn giữ ảnh cũ.' : ''}
-                  </span>
-                )}
+                <div className="pf-image-info">
+                  <input
+                    ref={fileInputRef}
+                    id="product-image-file"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handleFileChange}
+                    disabled={isSubmitting}
+                    style={{ display: 'none' }}
+                  />
 
-                {imageError && <span className="field-error-text">{imageError}</span>}
+                  <div className="pf-image-buttons">
+                    <button
+                      type="button"
+                      className="pf-btn-upload-trigger"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isSubmitting}
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                        <circle cx="9" cy="9" r="2" />
+                        <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                      </svg>
+                      {selectedFile
+                        ? 'Đổi ảnh khác'
+                        : isEdit && productToEdit?.imageUrl
+                        ? 'Thay ảnh mới'
+                        : 'Chọn ảnh từ máy'}
+                    </button>
+
+                    {selectedFile && (
+                      <button
+                        type="button"
+                        className="pf-btn-clear-image"
+                        onClick={handleClearSelectedFile}
+                        disabled={isSubmitting}
+                      >
+                        ✕ Bỏ ảnh vừa chọn
+                      </button>
+                    )}
+                  </div>
+
+                  {selectedFile ? (
+                    <span className="pf-image-filename" title={selectedFile.name}>
+                      Đã chọn: <strong>{selectedFile.name}</strong> ({(selectedFile.size / 1024).toFixed(0)} KB)
+                    </span>
+                  ) : (
+                    <span className="pf-image-hint">
+                      Hỗ trợ JPG, PNG, WebP (tối đa 5 MB). {isEdit && productToEdit?.imageUrl ? 'Để nguyên nếu muốn giữ ảnh cũ.' : ''}
+                    </span>
+                  )}
+
+                  {imageError && <span className="pf-field-error">{imageError}</span>}
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="form-grid-2">
-            {/* Mã hàng */}
-            <div className="form-group">
-              <label htmlFor="product-code" className="form-label required">
-                Mã hàng
+          {/* Nhóm 1: Thông tin sản phẩm */}
+          <div className="pf-section">
+            <div className="pf-section-header">
+              <span className="pf-section-badge" aria-hidden="true"></span>
+              <h3 className="pf-section-title">Thông tin sản phẩm</h3>
+            </div>
+
+            {/* Tên sản phẩm (Full-width) */}
+            <div className="pf-field">
+              <label htmlFor="product-name" className="pf-label">
+                Tên sản phẩm <span className="pf-required-star">*</span>
               </label>
               <input
-                ref={firstInputRef}
-                id="product-code"
+                id="product-name"
+                name="name"
                 type="text"
-                className={`text-input ${fieldErrors.code ? 'input-error' : ''}`}
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                placeholder="Ví dụ: 00101"
+                className={`pf-input ${fieldErrors.name ? 'pf-input-error' : ''}`}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ví dụ: Gạo ST25 Thượng Hạng Ông Cua Túi 5kg"
                 required
                 disabled={isSubmitting}
                 autoComplete="off"
               />
-              {fieldErrors.code && <span className="field-error-text">{fieldErrors.code}</span>}
+              {fieldErrors.name && <span className="pf-field-error">{fieldErrors.name}</span>}
             </div>
 
-            {/* Mã vạch */}
-            <div className="form-group">
-              <label htmlFor="product-barcode" className="form-label">
-                Mã vạch (không bắt buộc)
-              </label>
-              <input
-                id="product-barcode"
-                type="text"
-                className={`text-input ${fieldErrors.barcode ? 'input-error' : ''}`}
-                value={barcode}
-                onChange={(e) => setBarcode(e.target.value)}
-                placeholder="Ví dụ: 8935001201015"
-                disabled={isSubmitting}
-                autoComplete="off"
-              />
-              {fieldErrors.barcode && <span className="field-error-text">{fieldErrors.barcode}</span>}
+            {/* Hàng 2 cột: Mã hàng & Mã vạch */}
+            <div className="pf-grid-2">
+              {/* Mã hàng */}
+              <div className="pf-field">
+                <label htmlFor="product-code" className="pf-label">
+                  Mã hàng <span className="pf-required-star">*</span>
+                </label>
+                <input
+                  id="product-code"
+                  name="code"
+                  type="text"
+                  inputMode="text"
+                  className={`pf-input ${fieldErrors.code ? 'pf-input-error' : ''}`}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  placeholder="Ví dụ: 00101"
+                  required
+                  disabled={isSubmitting}
+                  autoComplete="off"
+                />
+                {fieldErrors.code && <span className="pf-field-error">{fieldErrors.code}</span>}
+              </div>
+
+              {/* Mã vạch */}
+              <div className="pf-field">
+                <label htmlFor="product-barcode" className="pf-label">
+                  Mã vạch <span className="pf-optional-tag">(không bắt buộc)</span>
+                </label>
+                <input
+                  id="product-barcode"
+                  name="barcode"
+                  type="text"
+                  inputMode="text"
+                  className={`pf-input ${fieldErrors.barcode ? 'pf-input-error' : ''}`}
+                  value={barcode}
+                  onChange={(e) => setBarcode(e.target.value)}
+                  placeholder="Ví dụ: 8935001201015"
+                  disabled={isSubmitting}
+                  autoComplete="off"
+                />
+                {fieldErrors.barcode && <span className="pf-field-error">{fieldErrors.barcode}</span>}
+              </div>
+            </div>
+
+            {/* Hàng 2 cột: Danh mục & Đơn vị tính */}
+            <div className="pf-grid-2">
+              {/* Danh mục */}
+              <div className="pf-field">
+                <label htmlFor="product-category" className="pf-label">
+                  Danh mục <span className="pf-required-star">*</span>
+                </label>
+                <input
+                  id="product-category"
+                  name="category"
+                  type="text"
+                  list="category-suggestions"
+                  className={`pf-input ${fieldErrors.category ? 'pf-input-error' : ''}`}
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  placeholder="Chọn hoặc gõ danh mục mới"
+                  required
+                  disabled={isSubmitting}
+                  autoComplete="off"
+                />
+                <datalist id="category-suggestions">
+                  {existingCategories.map((cat) => (
+                    <option key={cat} value={cat} />
+                  ))}
+                </datalist>
+                {fieldErrors.category && (
+                  <span className="pf-field-error">{fieldErrors.category}</span>
+                )}
+              </div>
+
+              {/* Đơn vị tính */}
+              <div className="pf-field">
+                <label htmlFor="product-unit" className="pf-label">
+                  Đơn vị tính <span className="pf-required-star">*</span>
+                </label>
+                <input
+                  id="product-unit"
+                  name="unit"
+                  type="text"
+                  list="unit-suggestions"
+                  className={`pf-input ${fieldErrors.unit ? 'pf-input-error' : ''}`}
+                  value={unit}
+                  onChange={(e) => setUnit(e.target.value)}
+                  placeholder="Ví dụ: gói, chai, kg, túi..."
+                  required
+                  disabled={isSubmitting}
+                  autoComplete="off"
+                />
+                <datalist id="unit-suggestions">
+                  {COMMON_UNITS.map((u) => (
+                    <option key={u} value={u} />
+                  ))}
+                </datalist>
+                {fieldErrors.unit && <span className="pf-field-error">{fieldErrors.unit}</span>}
+              </div>
             </div>
           </div>
 
-          {/* Tên sản phẩm */}
-          <div className="form-group">
-            <label htmlFor="product-name" className="form-label required">
-              Tên sản phẩm
-            </label>
-            <input
-              id="product-name"
-              type="text"
-              className={`text-input ${fieldErrors.name ? 'input-error' : ''}`}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ví dụ: Gạo ST25 Thượng Hạng Ông Cua Túi 5kg"
-              required
-              disabled={isSubmitting}
-            />
-            {fieldErrors.name && <span className="field-error-text">{fieldErrors.name}</span>}
-          </div>
-
-          <div className="form-grid-2">
-            {/* Danh mục */}
-            <div className="form-group">
-              <label htmlFor="product-category" className="form-label required">
-                Danh mục
-              </label>
-              <input
-                id="product-category"
-                type="text"
-                list="category-suggestions"
-                className={`text-input ${fieldErrors.category ? 'input-error' : ''}`}
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                placeholder="Chọn hoặc gõ danh mục mới"
-                required
-                disabled={isSubmitting}
-              />
-              <datalist id="category-suggestions">
-                {existingCategories.map((cat) => (
-                  <option key={cat} value={cat} />
-                ))}
-              </datalist>
-              {fieldErrors.category && (
-                <span className="field-error-text">{fieldErrors.category}</span>
-              )}
+          {/* Nhóm 2: Giá và tồn kho */}
+          <div className="pf-section">
+            <div className="pf-section-header">
+              <span className="pf-section-badge" aria-hidden="true"></span>
+              <h3 className="pf-section-title">Giá và tồn kho</h3>
             </div>
 
-            {/* Đơn vị tính */}
-            <div className="form-group">
-              <label htmlFor="product-unit" className="form-label required">
-                Đơn vị tính
-              </label>
-              <input
-                id="product-unit"
-                type="text"
-                list="unit-suggestions"
-                className={`text-input ${fieldErrors.unit ? 'input-error' : ''}`}
-                value={unit}
-                onChange={(e) => setUnit(e.target.value)}
-                placeholder="Ví dụ: gói, chai, kg, túi..."
-                required
-                disabled={isSubmitting}
-              />
-              <datalist id="unit-suggestions">
-                {COMMON_UNITS.map((u) => (
-                  <option key={u} value={u} />
-                ))}
-              </datalist>
-              {fieldErrors.unit && <span className="field-error-text">{fieldErrors.unit}</span>}
-            </div>
-          </div>
+            {/* Hàng 2 cột: Giá nhập & Giá bán */}
+            <div className="pf-grid-2">
+              {/* Giá nhập */}
+              <div className="pf-field">
+                <label htmlFor="product-purchase-price" className="pf-label">
+                  Giá nhập (₫) <span className="pf-required-star">*</span>
+                </label>
+                <input
+                  id="product-purchase-price"
+                  name="purchasePrice"
+                  type="text"
+                  inputMode="decimal"
+                  className={`pf-input ${fieldErrors.purchasePrice ? 'pf-input-error' : ''}`}
+                  value={purchasePrice}
+                  onChange={(e) => setPurchasePrice(e.target.value)}
+                  placeholder="Ví dụ: 25000"
+                  required
+                  disabled={isSubmitting}
+                  autoComplete="off"
+                />
+                {fieldErrors.purchasePrice && (
+                  <span className="pf-field-error">{fieldErrors.purchasePrice}</span>
+                )}
+              </div>
 
-          <div className="form-grid-3">
-            {/* Giá nhập */}
-            <div className="form-group">
-              <label htmlFor="product-purchase-price" className="form-label required">
-                Giá nhập (₫)
-              </label>
-              <input
-                id="product-purchase-price"
-                type="text"
-                inputMode="decimal"
-                className={`text-input ${fieldErrors.purchasePrice ? 'input-error' : ''}`}
-                value={purchasePrice}
-                onChange={(e) => setPurchasePrice(e.target.value)}
-                placeholder="Ví dụ: 25000"
-                required
-                disabled={isSubmitting}
-              />
-              {fieldErrors.purchasePrice && (
-                <span className="field-error-text">{fieldErrors.purchasePrice}</span>
-              )}
-            </div>
-
-            {/* Giá bán */}
-            <div className="form-group">
-              <label htmlFor="product-sale-price" className="form-label required">
-                Giá bán (₫)
-              </label>
-              <input
-                id="product-sale-price"
-                type="text"
-                inputMode="decimal"
-                className={`text-input ${fieldErrors.salePrice ? 'input-error' : ''}`}
-                value={salePrice}
-                onChange={(e) => setSalePrice(e.target.value)}
-                placeholder="Ví dụ: 30000"
-                required
-                disabled={isSubmitting}
-              />
-              {fieldErrors.salePrice && (
-                <span className="field-error-text">{fieldErrors.salePrice}</span>
-              )}
+              {/* Giá bán */}
+              <div className="pf-field">
+                <label htmlFor="product-sale-price" className="pf-label">
+                  Giá bán (₫) <span className="pf-required-star">*</span>
+                </label>
+                <input
+                  id="product-sale-price"
+                  name="salePrice"
+                  type="text"
+                  inputMode="decimal"
+                  className={`pf-input ${fieldErrors.salePrice ? 'pf-input-error' : ''}`}
+                  value={salePrice}
+                  onChange={(e) => setSalePrice(e.target.value)}
+                  placeholder="Ví dụ: 30000"
+                  required
+                  disabled={isSubmitting}
+                  autoComplete="off"
+                />
+                {fieldErrors.salePrice && (
+                  <span className="pf-field-error">{fieldErrors.salePrice}</span>
+                )}
+              </div>
             </div>
 
             {/* Số lượng tồn kho */}
-            <div className="form-group">
-              <label htmlFor="product-stock" className="form-label required">
-                Số lượng tồn
+            <div className="pf-field">
+              <label htmlFor="product-stock" className="pf-label">
+                Số lượng tồn <span className="pf-required-star">*</span>
               </label>
               <input
                 id="product-stock"
+                name="stock"
                 type="text"
                 inputMode="decimal"
-                className={`text-input ${fieldErrors.stock ? 'input-error' : ''}`}
+                className={`pf-input ${fieldErrors.stock ? 'pf-input-error' : ''}`}
                 value={stock}
                 onChange={(e) => setStock(e.target.value)}
                 placeholder="Ví dụ: 10 hoặc 2.5"
                 required
                 disabled={isSubmitting}
+                autoComplete="off"
               />
-              {fieldErrors.stock && <span className="field-error-text">{fieldErrors.stock}</span>}
+              {fieldErrors.stock && <span className="pf-field-error">{fieldErrors.stock}</span>}
+              <p className="pf-hint-text">
+                💡 Dùng dấu chấm (.) cho phần thập phân (ví dụ: <code>2.5</code> kg hoặc <code>12500.50</code> ₫).
+              </p>
             </div>
           </div>
 
-          <p className="form-hint">
-            💡 Dùng dấu chấm (.) cho phần thập phân (ví dụ: <code>2.5</code> kg hoặc <code>12500.50</code> ₫).
-          </p>
+          {/* Nhóm 3: Ghi chú thêm */}
+          <div className="pf-section">
+            <div className="pf-section-header">
+              <span className="pf-section-badge" aria-hidden="true"></span>
+              <h3 className="pf-section-title">Ghi chú thêm</h3>
+            </div>
 
-          {/* Ghi chú */}
-          <div className="form-group">
-            <label htmlFor="product-notes" className="form-label">
-              Ghi chú thêm (không bắt buộc)
-            </label>
-            <textarea
-              id="product-notes"
-              className="text-input textarea-input"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Vị trí để hàng trong tủ, lưu ý bảo quản..."
-              rows={2}
-              disabled={isSubmitting}
-            />
+            <div className="pf-field">
+              <label htmlFor="product-notes" className="pf-label">
+                Ghi chú lưu ý <span className="pf-optional-tag">(không bắt buộc)</span>
+              </label>
+              <textarea
+                id="product-notes"
+                name="notes"
+                className="pf-textarea"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Vị trí để hàng trong tủ, lưu ý bảo quản..."
+                rows={3}
+                disabled={isSubmitting}
+              />
+            </div>
           </div>
 
           {isOnline === false && (
-            <div className="form-offline-notice" role="alert">
+            <div className="pf-alert pf-alert-warning" role="alert">
               <span>⚠️ Đang mất kết nối mạng. Không thể lưu dữ liệu lúc này.</span>
             </div>
           )}
 
-          <div className="modal-actions">
+          {/* Thanh nút Hủy & Lưu ở cuối form */}
+          <div className="pf-actions-bar">
             <button
               type="button"
-              className="btn-cancel"
+              className="pf-btn-cancel"
               onClick={handleExplicitCancel}
               disabled={isSubmitting}
             >
@@ -939,15 +980,15 @@ function ProductFormDialog({
             </button>
             <button
               type="submit"
-              className="btn-save"
+              className="pf-btn-save"
               disabled={isSubmitting || isOnline === false}
               title={isOnline === false ? 'Không thể lưu khi mất kết nối mạng' : undefined}
             >
               {isSubmitting ? (
-                <span className="btn-loading-state">
-                  <span className="spinner-dot" aria-hidden="true"></span>
+                <>
+                  <span className="pf-loading-spinner" aria-hidden="true"></span>
                   {uploadStepText || 'Đang lưu...'}
-                </span>
+                </>
               ) : isEdit ? (
                 'Lưu thay đổi'
               ) : (

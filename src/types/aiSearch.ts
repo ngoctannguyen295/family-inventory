@@ -9,6 +9,10 @@ export interface GeminiExtraction {
   quantity_unit: string | null;
   visible_text: string[];
   readable: boolean;
+  object_type?: string | null;
+  visual_features?: string | null;
+  visual_signature?: string | null;
+  category_hint?: string | null;
 }
 
 export interface ProductRecord {
@@ -23,12 +27,19 @@ export interface ProductRecord {
   sale_price: number;
   stock: number;
   notes: string;
+  visual_description?: string | null;
 }
 
 export interface ProductMatchResult {
   product: ProductRecord;
   match_score: number;
   match_reasons: string[];
+  matched_name?: boolean;
+  matched_brand?: boolean;
+  matched_variant?: boolean;
+  matched_quantity?: boolean;
+  matched_visual?: boolean;
+  vector_similarity?: number;
 }
 
 export interface TimingMetadata {

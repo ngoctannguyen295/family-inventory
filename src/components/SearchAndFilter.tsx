@@ -13,6 +13,8 @@ interface SearchAndFilterProps {
   canEdit?: boolean;
   deletedCount?: number;
   onOpenDeletedProducts?: () => void;
+  onSyncAi?: () => void;
+  isSyncingAi?: boolean;
 }
 
 export function SearchAndFilter({
@@ -28,6 +30,8 @@ export function SearchAndFilter({
   canEdit,
   deletedCount = 0,
   onOpenDeletedProducts,
+  onSyncAi,
+  isSyncingAi = false,
 }: SearchAndFilterProps) {
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     onSearchChange(e.target.value);
@@ -104,7 +108,13 @@ export function SearchAndFilter({
               strokeLinejoin="round"
               aria-hidden="true"
             >
-              <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" />
+              <path d="M3 5v4" />
+              <path d="M21 5v4" />
+              <path d="M3 19v-4" />
+              <path d="M21 19v-4" />
+              <line x1="7" x2="7" y1="9" y2="15" />
+              <line x1="12" x2="12" y1="9" y2="15" />
+              <line x1="17" x2="17" y1="9" y2="15" />
             </svg>
             <span className="btn-label-text">Quét mã vạch</span>
           </button>
@@ -113,10 +123,10 @@ export function SearchAndFilter({
         {onOpenImageSearch && (
           <button
             type="button"
-            className="btn-large-scanner btn-ai-image-large"
+            className="btn-large-scanner btn-imagesearch-large"
             onClick={(e) => onOpenImageSearch(e.currentTarget)}
-            title="Tìm sản phẩm bằng ảnh chụp bao bì qua AI"
-            aria-label="Tìm sản phẩm bằng ảnh chụp bao bì qua AI"
+            title="Tìm kiếm bằng ảnh chụp"
+            aria-label="Mở tìm kiếm bằng ảnh camera hoặc thư viện"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -169,6 +179,20 @@ export function SearchAndFilter({
               title="Xem danh sách các sản phẩm đã xóa mềm"
             >
               🗑️ Đã xóa ({deletedCount})
+            </button>
+          )}
+
+          {/* Nút đồng bộ vector có kiểm soát dành cho người có quyền can_edit */}
+          {canEdit && onSyncAi && (
+            <button
+              type="button"
+              id="btn-sync-ai"
+              className={`category-pill sync-ai-pill ${isSyncingAi ? 'is-syncing' : ''}`}
+              onClick={onSyncAi}
+              disabled={isSyncingAi}
+              title="Đồng bộ đặc trưng hình ảnh cho sản phẩm trong kho"
+            >
+              {isSyncingAi ? '⏳ Đang đồng bộ...' : '🔄 Đồng bộ đặc trưng ảnh'}
             </button>
           )}
         </div>

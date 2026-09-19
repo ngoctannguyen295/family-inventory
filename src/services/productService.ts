@@ -226,7 +226,6 @@ export async function createProduct(input: CreateProductInput): Promise<ServiceR
     sale_price: input.salePrice,
     stock: input.stock,
     notes: input.notes ? input.notes.trim() : '',
-    deleted_at: null,
   };
 
   try {
@@ -259,7 +258,8 @@ export async function createProduct(input: CreateProductInput): Promise<ServiceR
       return { data: null, error: 'Không nhận được dữ liệu phản hồi sau khi tạo.' };
     }
 
-    return { data: mapProductRow(data as ProductRow), error: null };
+    const createdProduct = mapProductRow(data as ProductRow);
+    return { data: createdProduct, error: null };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Lỗi kết nối khi thêm sản phẩm.';
     return { data: null, error: message };
@@ -330,7 +330,8 @@ export async function updateProduct(
       };
     }
 
-    return { data: mapProductRow(data as ProductRow), error: null };
+    const updatedProduct = mapProductRow(data as ProductRow);
+    return { data: updatedProduct, error: null };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Lỗi kết nối khi cập nhật sản phẩm.';
     return { data: null, error: message };

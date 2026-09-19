@@ -748,16 +748,16 @@ export function ImageSearchModal({
               </div>
             )}
 
-            {/* Thẻ minh bạch công nghệ Gemini */}
+            {/* Thẻ mô tả tính năng nhận diện ảnh */}
             <div className="gemini-transparency-card">
               <div className="gemini-icon" aria-hidden="true">
                 ✨
               </div>
               <div className="gemini-content">
-                <strong>Tìm kiếm bằng Google Gemini:</strong>
+                <strong>Tìm kiếm bằng hình ảnh:</strong>
                 <p>
-                  Ảnh sẽ được gửi đến mô hình AI để nhận diện bao bì, trích xuất tên sản phẩm,
-                  thương hiệu và dung tích, sau đó đối chiếu với các sản phẩm đang có trong kho gia đình.
+                  Ảnh được phân tích để đọc bao bì hoặc trích xuất đặc trưng vật thể (đối với đồ không nhãn mác),
+                  sau đó đối chiếu với các sản phẩm trong kho gia đình.
                 </p>
               </div>
             </div>
@@ -820,7 +820,7 @@ export function ImageSearchModal({
             {/* Thông tin trích xuất tóm tắt hoặc trạng thái */}
             <div className="results-query-meta">
               {isSearching ? (
-                <span className="query-status-text">Đang nhận diện bao bì...</span>
+                <span className="query-status-text">Đang nhận diện sản phẩm...</span>
               ) : searchResponse?.ai_extraction?.product_name ? (
                 <div className="query-name-box">
                   <span className="query-product-name" title={searchResponse.ai_extraction.product_name}>
@@ -835,8 +835,19 @@ export function ImageSearchModal({
                     </span>
                   )}
                 </div>
+              ) : searchResponse?.ai_extraction?.object_type ? (
+                <div className="query-name-box">
+                  <span className="query-product-name" title={searchResponse.ai_extraction.object_type}>
+                    🔍 {searchResponse.ai_extraction.object_type}
+                  </span>
+                  {searchResponse.ai_extraction.visual_features && (
+                    <span className="query-product-qty" title={searchResponse.ai_extraction.visual_features}>
+                      {searchResponse.ai_extraction.visual_features}
+                    </span>
+                  )}
+                </div>
               ) : (
-                <span className="query-status-text">Kết quả tìm kiếm bao bì</span>
+                <span className="query-status-text">Kết quả tìm kiếm sản phẩm</span>
               )}
             </div>
 
@@ -868,15 +879,15 @@ export function ImageSearchModal({
                   {searchStep === 'optimizing'
                     ? 'Đang chuẩn bị & tối ưu ảnh...'
                     : searchStep === 'analyzing'
-                    ? 'Đang nhận diện bao bì qua AI...'
+                    ? 'Đang nhận diện sản phẩm & vật thể...'
                     : 'Đang đối chiếu kho gia đình...'}
                 </h3>
                 <p className="loading-subtitle">
                   {searchStep === 'optimizing'
-                    ? 'Tối ưu độ phân giải để mô hình AI đọc chữ rõ nhất và truyền tải nhanh nhất.'
+                    ? 'Tối ưu độ phân giải để mô hình AI nhận diện rõ nhất và truyền tải nhanh nhất.'
                     : searchStep === 'analyzing'
-                    ? 'Mô hình AI đang đọc tên thương mại, nhãn hiệu và thông số từ bao bì.'
-                    : 'Đối chiếu thông tin bao bì với danh mục hàng hóa trong kho.'}
+                    ? 'Mô hình AI đang phân tích bao bì, thương hiệu hoặc đặc trưng đồ vật trơn.'
+                    : 'So khớp vector hình ảnh và dữ liệu với danh mục hàng hóa trong kho.'}
                 </p>
               </div>
             )}
@@ -1044,16 +1055,23 @@ export function ImageSearchModal({
                               <span className="card-stock-text">
                                 Kho: <strong>{product.stock} {product.unit}</strong>
                               </span>
-                              {item.match_score >= 70 ? (
-                                <span className="card-match-badge match-high" title="Đối chiếu điểm cao">
-                                  Khớp cao
+                              {typeof item.vector_similarity === 'number' && item.vector_similarity >= 0.5 ? (
+                                <span
+                                  className="card-match-badge match-high"
+                                  title={`Độ tương đồng hình ảnh: ${item.vector_similarity.toFixed(2)}`}
+                                >
+                                  Tương đồng: {item.vector_similarity.toFixed(2)}
+                                </span>
+                              ) : item.match_score >= 70 ? (
+                                <span className="card-match-badge match-high" title="Đối chiếu thông tin khớp cao">
+                                  Khớp thông tin
                                 </span>
                               ) : (
                                 <span
                                   className="card-match-badge match-medium"
-                                  title="Gợi ý phù hợp dựa trên tên và bao bì, cần xác nhận trước khi chọn"
+                                  title="Gợi ý phù hợp dựa trên tên và đặc tính, cần xác nhận trước khi chọn"
                                 >
-                                  Gợi ý - cần xác nhận
+                                  Gợi ý
                                 </span>
                               )}
                             </div>
