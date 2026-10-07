@@ -149,3 +149,84 @@ test('4. Regression Test: Phân biệt biến thể hậu tố Yumangel F vs Yum
     `Khớp đúng hậu tố F (score=${scoreF}) phải có điểm cao hơn biến thể khác hậu tố S (score=${scoreS})`
   );
 });
+
+test('5. Regression Test: Ảnh đèn LED xoay vũ trường mini phải gợi ý Đèn sao (mã 10), loại trừ Chuột (08) và Cáp (C02)', () => {
+  const denSaoProduct: ProductRecord = {
+    id: 'prod-den-sao-10',
+    code: '10',
+    name: 'Đèn sao',
+    category: 'Điện tử',
+    unit: 'Cái',
+    purchase_price: 50000,
+    sale_price: 60000,
+    stock: 10,
+    notes: '',
+    image_url: 'path/den_sao.jpg',
+  };
+
+  const chuotProduct: ProductRecord = {
+    id: 'prod-chuot-08',
+    code: '08',
+    name: 'Chuột Gaming',
+    category: 'Đồ điện tử',
+    unit: 'Cái',
+    purchase_price: 150000,
+    sale_price: 170000,
+    stock: 10,
+    notes: '',
+    image_url: 'path/chuot.jpg',
+  };
+
+  const capProduct: ProductRecord = {
+    id: 'prod-cap-c02',
+    code: 'C02',
+    name: 'Cáp sạc Type-C sang Lightning',
+    category: 'Gia vị',
+    unit: 'Sợi',
+    purchase_price: 40000,
+    sale_price: 60000,
+    stock: 10,
+    notes: '',
+    image_url: 'path/cap.jpg',
+  };
+
+  // AI nhận diện từ ảnh chụp quả cầu xoay:
+  const aiExtractionDiscoLight: GeminiExtraction = {
+    readable: true,
+    product_name: 'Đèn LED xoay vũ trường mini',
+    object_type: 'đèn led xoay',
+    brand: null,
+    variant: 'xoay 7 màu',
+    visible_text: [],
+    visual_features: 'quả cầu trong suốt đế nhựa màu đen xanh',
+    category_hint: 'thiết bị chiếu sáng',
+  };
+
+  // Giả lập map độ tương đồng vector:
+  // Đèn sao: 0.88 (ảnh cùng loại)
+  // Chuột: 0.70 (do cùng màu đen/nhựa/LED)
+  // Cáp: 0.65 (do cùng phụ kiện)
+  const vectorMap = new Map<string, number>([
+    [denSaoProduct.id, 0.88],
+    [chuotProduct.id, 0.70],
+    [capProduct.id, 0.65],
+  ]);
+
+  const ranked = rankProductMatches(
+    [denSaoProduct, chuotProduct, capProduct],
+    aiExtractionDiscoLight,
+    vectorMap
+  );
+
+  // 1. Chuột và Cáp phải bị loại bỏ hoàn toàn do mâu thuẫn loại sản phẩm (Đèn ≠ Chuột, Đèn ≠ Cáp)
+  const chuotScore = calculateMatchScore(chuotProduct, aiExtractionDiscoLight, 0.70).score;
+  const capScore = calculateMatchScore(capProduct, aiExtractionDiscoLight, 0.65).score;
+  assert.equal(chuotScore, 0, 'Chuột Gaming phải có score = 0 khi tìm đèn');
+  assert.equal(capScore, 0, 'Cáp sạc phải có score = 0 khi tìm đèn');
+
+  // 2. Đèn sao phải được giữ lại và xếp thứ 1
+  assert.equal(ranked.length, 1, 'Chỉ duy nhất Đèn sao được gợi ý');
+  assert.equal(ranked[0].product.code, '10', 'Đèn sao (mã 10) phải đứng Top 1');
+  assert.ok(ranked[0].match_score >= 80, `Điểm đối chiếu của Đèn sao phải cao (thực tế: ${ranked[0].match_score})`);
+});
+

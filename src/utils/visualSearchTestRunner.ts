@@ -571,7 +571,191 @@ export async function runScenario6(onProgress?: (msg: string) => void): Promise<
 }
 
 // -------------------------------------------------------------
-// TOÀN BỘ 6 KỊCH BẢN CHẠY TUẦN TỰ VỚI GIÃN CÁCH
+// KỊCH BẢN 7: Kiểm định Đèn sao (mã 10) & Chặn gợi ý sai Chuột (08) / Cáp (C02)
+// -------------------------------------------------------------
+export async function runScenario7(onProgress?: (msg: string) => void): Promise<ScenarioResult> {
+  if (!supabase) throw new Error('Supabase chưa cấu hình');
+  const startTotal = performance.now();
+
+  // 1. Kiểm tra trạng thái CSDL thực tế của mã 10
+  onProgress?.('Kịch bản 7: Đang kiểm tra trạng thái CSDL thực tế của mã 10 ("Đèn sao")...');
+  const { data: prod10, error: err10 } = await supabase
+    .from('products')
+    .select('id, code, barcode, name, category, unit, purchase_price, sale_price, stock, notes, image_url, embedding_status, embedding_source, embedding_model, embedding_model_version, embedding_retry_count, embedding_error, visual_description, deleted_at, image_embedding')
+    .eq('code', '10')
+    .single();
+
+  if (err10 || !prod10) {
+    throw new Error(`Không tìm thấy sản phẩm mã 10 trong cơ sở dữ liệu: ${err10?.message || 'not found'}`);
+  }
+
+  const p10HasVector = Boolean(prod10.image_embedding);
+  let sync10Result: SyncBatchResult | null = null;
+
+  // 2. Nếu thiếu vector hoặc chưa synced từ ảnh thật, thực hiện đồng bộ riêng mã 10 từ ảnh thật
+  const is10ValidSynced = Boolean(
+    prod10.embedding_status === 'synced' &&
+    prod10.embedding_source === 'image_description' &&
+    p10HasVector
+  );
+
+  if (!is10ValidSynced) {
+    onProgress?.('Kịch bản 7: Mã 10 chưa có vector ảnh thật. Đang tải ảnh thật Đèn sao lên Storage...');
+    const activeUserId = await getActiveUserId();
+    const realPhotoFile = await fetchAssetFile('/test-assets/disco_light.jpg', 'disco_light.jpg');
+    const uploadRes = await uploadProductImage(realPhotoFile, activeUserId);
+    if (!uploadRes.path) throw new Error(`Upload ảnh Đèn sao thất bại: ${uploadRes.error}`);
+
+    onProgress?.('Kịch bản 7: Đang cập nhật ảnh thật và kích hoạt lifecycle sync cho Đèn sao...');
+    await updateProduct(prod10.id, {
+      code: '10',
+      barcode: prod10.barcode || null,
+      name: prod10.name || 'Đèn sao',
+      category: prod10.category || 'Điện tử',
+      unit: prod10.unit || 'Cái',
+      purchasePrice: Number(prod10.purchase_price) || 50000,
+      salePrice: Number(prod10.sale_price) || 60000,
+      stock: Number(prod10.stock) || 10,
+      imageUrl: uploadRes.path,
+      notes: prod10.notes || '',
+    });
+
+    onProgress?.('Kịch bản 7: Đang hoàn tất đồng bộ ảnh thật từ Storage cho Đèn sao (Gemini Vision & Embedding)...');
+    sync10Result = await syncBatchEmbeddings();
+    await sleep(4000);
+
+    // Kiểm tra lại sau khi đồng bộ
+    const { data: recheck10 } = await supabase
+      .from('products')
+      .select('embedding_status, embedding_source, image_embedding, visual_description')
+      .eq('code', '10')
+      .single();
+
+    if (
+      recheck10?.embedding_status !== 'synced' ||
+      recheck10?.embedding_source !== 'image_description' ||
+      !recheck10?.image_embedding
+    ) {
+      throw new Error(
+        `Đồng bộ mã 10 thất bại hoặc chưa hoàn tất: status=${recheck10?.embedding_status}, source=${recheck10?.embedding_source}`
+      );
+    }
+    onProgress?.('Kịch bản 7: Đồng bộ mã 10 thành công (status=synced, source=image_description).');
+  } else {
+    onProgress?.('Kịch bản 7: Mã 10 đã có vector hợp lệ (status=synced, source=image_description).');
+  }
+
+  // 3. Chuẩn bị file ảnh quả cầu đèn xoay vũ trường để tìm kiếm
+  onProgress?.('Kịch bản 7: Đang chuẩn bị file ảnh quả cầu đèn xoay vũ trường...');
+  const discoLightFile = await fetchAssetFile('/test-assets/disco_light.jpg', 'disco_light.jpg');
+
+  // 4. Tìm kiếm bằng ảnh đèn
+  onProgress?.('Kịch bản 7: Đang gửi ảnh đèn đến AI để tìm kiếm và xếp hạng...');
+  const searchStart = performance.now();
+  const searchRes = await searchProductByImage(discoLightFile);
+  const searchLatency = Math.round(performance.now() - searchStart);
+
+  if (!searchRes.success || !searchRes.data) {
+    throw new Error(`Tìm kiếm bằng ảnh đèn thất bại: ${searchRes.error || searchRes.message}`);
+  }
+
+  const matches = searchRes.data.matches || [];
+  const topMatch = matches[0];
+  const p10Match = matches.find((m) => m.product.code === '10');
+  const p10Rank = p10Match ? matches.indexOf(p10Match) + 1 : -1;
+
+  // Kiểm tra Chuột gaming (08) và Cáp sạc (C02) có bị loại trừ hoàn toàn hay không
+  const mouseMatch = matches.find((m) => m.product.code === '08');
+  const cableMatch = matches.find((m) => m.product.code === 'C02');
+  const isMouseExcluded = !mouseMatch;
+  const isCableExcluded = !cableMatch;
+
+  // 5. Kiểm tra chéo: Thử thêm ảnh cáp và Yumangel để bảo đảm không làm hỏng các ca đã đạt
+  onProgress?.('Kịch bản 7: Kiểm tra chéo với ảnh cáp sạc...');
+  const cableQueryFile = await fetchAssetFile('/test-assets/cable_query.jpg', 'cable_query.jpg');
+  const cableRes = await searchProductByImage(cableQueryFile);
+  const cableMatches = cableRes.data?.matches || [];
+  const isP10NotInCable = !cableMatches.some((m) => m.product.code === '10');
+  const isYumangelNotInCable = !cableMatches.some((m) => m.product.code === '07');
+
+  onProgress?.('Kịch bản 7: Kiểm tra chéo với ảnh Yumangel F...');
+  const yumangelFile = await fetchAssetFile('/test-assets/yumangel_f_photo.jpg', 'yumangel.jpg');
+  const yumangelRes = await searchProductByImage(yumangelFile);
+  const yumangelMatches = yumangelRes.data?.matches || [];
+  const isYumangelTop = yumangelMatches[0]?.product.code === '07';
+  const isP10NotInYumangel = !yumangelMatches.some((m) => m.product.code === '10');
+
+  const crossChecksPassed = isP10NotInCable && isYumangelNotInCable && isYumangelTop && isP10NotInYumangel;
+  const passed = Boolean(
+    p10Rank === 1 &&
+    isMouseExcluded &&
+    isCableExcluded &&
+    crossChecksPassed
+  );
+
+  return {
+    scenarioNumber: 7,
+    title: 'Kiểm định Đèn sao (mã 10): Top 1, chặn gợi ý sai Chuột (08) & Cáp (C02), kiểm tra chéo không hồi quy',
+    passed,
+    latencyMs: searchLatency,
+    details: {
+      prod_10_database: {
+        id: prod10.id,
+        code: prod10.code,
+        name: prod10.name,
+        category: prod10.category,
+        image_url: prod10.image_url,
+        embedding_status: prod10.embedding_status,
+        embedding_source: prod10.embedding_source,
+        embedding_model: prod10.embedding_model,
+        embedding_model_version: prod10.embedding_model_version,
+        has_vector: p10HasVector,
+      },
+      sync_10_result: sync10Result,
+      ai_extraction: {
+        object_type: searchRes.data.ai_extraction?.object_type,
+        product_name: searchRes.data.ai_extraction?.product_name,
+        brand: searchRes.data.ai_extraction?.brand,
+        visual_signature: searchRes.data.ai_extraction?.visual_signature,
+      },
+      search_results: {
+        total_matches: matches.length,
+        top_match_code: topMatch?.product.code,
+        top_match_name: topMatch?.product.name,
+        p10_rank: p10Rank,
+        p10_score: p10Match?.match_score,
+        p10_similarity: p10Match?.vector_similarity,
+        p10_reasons: p10Match?.match_reasons,
+        mouse_08_excluded: isMouseExcluded,
+        mouse_08_in_results: Boolean(mouseMatch),
+        cable_C02_excluded: isCableExcluded,
+        cable_C02_in_results: Boolean(cableMatch),
+      },
+      cross_checks: {
+        cable_cross_check: {
+          passed: isP10NotInCable && isYumangelNotInCable,
+          p10_in_cable: !isP10NotInCable,
+          yumangel_in_cable: !isYumangelNotInCable,
+          matches_count: cableMatches.length,
+        },
+        yumangel_cross_check: {
+          passed: isYumangelTop && isP10NotInYumangel,
+          yumangel_top: isYumangelTop,
+          p10_in_yumangel: !isP10NotInYumangel,
+          top_match_code: yumangelMatches[0]?.product.code,
+        },
+      },
+      search_latency_ms: searchLatency,
+      total_duration_ms: Math.round(performance.now() - startTotal),
+    },
+    summary: passed
+      ? `Đạt: Ảnh đèn gợi ý chính xác "Đèn sao" (mã 10, Top 1, điểm=${p10Match?.match_score}, sim=${p10Match?.vector_similarity?.toFixed(4)}) trong ${searchLatency}ms. Chuột (08) và Cáp (C02) bị loại trừ hoàn toàn (score=0). Kiểm tra chéo cáp và Yumangel đều đạt không hồi quy.`
+      : `Chưa đạt: p10_rank=${p10Rank}, mouse_excluded=${isMouseExcluded}, cable_excluded=${isCableExcluded}, cross_checks=${crossChecksPassed}`,
+  };
+}
+
+// -------------------------------------------------------------
+// TOÀN BỘ 7 KỊCH BẢN CHẠY TUẦN TỰ VỚI GIÃN CÁCH
 // -------------------------------------------------------------
 export async function runVisualSearchScenarios(
   onProgress?: (step: string) => void
@@ -600,6 +784,10 @@ export async function runVisualSearchScenarios(
     await sleep(8000);
 
     results.push(await runScenario6(onProgress));
+    onProgress?.('Đang tạm dừng 8s để đảm bảo định mức AI...');
+    await sleep(8000);
+
+    results.push(await runScenario7(onProgress));
   } catch (err) {
     console.error('Lỗi khi chạy bộ kiểm thử:', err);
   }
@@ -621,4 +809,6 @@ if (typeof window !== 'undefined') {
   (window as unknown as Record<string, unknown>).__runScenario4 = runScenario4;
   (window as unknown as Record<string, unknown>).__runScenario5 = runScenario5;
   (window as unknown as Record<string, unknown>).__runScenario6 = runScenario6;
+  (window as unknown as Record<string, unknown>).__runScenario7 = runScenario7;
 }
+

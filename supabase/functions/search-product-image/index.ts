@@ -599,13 +599,28 @@ Deno.serve(async (req: Request) => {
 
     const totalServerTimeMs = Math.round(performance.now() - requestStartTime);
 
-    // Ghi log máy chủ có cấu trúc: Tuyệt đối không log ảnh, base64, token, hoặc API key
+    // Ghi log máy chủ có cấu trúc an toàn: Tuyệt đối không log ảnh, base64, token, hoặc API key
     console.log(
       `[SEARCH_TIMING] reqId: ${requestId} | auth: ${authTimeMs}ms | db: ${dbTimeMs}ms | quota: ${quotaTimeMs}ms | gemini: ${geminiTimeMs}ms | vector: ${
         vectorTimeMs ?? 0
       }ms | matching: ${matchingTimeMs}ms | total: ${totalServerTimeMs}ms | matches: ${matches.length} | vecHits: ${
         vectorMap.size
       }`
+    );
+
+    // Log an toàn: mô tả vật thể AI trích xuất, trạng thái vector mã 10, điểm và lý do mã 10 được giữ hoặc bị loại
+    const p10Prod = productsToScan.find((p) => p.code === '10');
+    const p10InVec = p10Prod ? vectorMap.has(p10Prod.id) : false;
+    const p10Sim = p10Prod ? vectorMap.get(p10Prod.id) : undefined;
+    const p10Match = matches.find((m) => m.product.code === '10');
+    const p10Rank = p10Match ? matches.indexOf(p10Match) + 1 : null;
+
+    console.log(
+      `[SEARCH_AUDIT] reqId: ${requestId} | ai_obj: "${aiExtraction.object_type || ''}" | ai_name: "${aiExtraction.product_name || ''}" | ai_sig: "${aiExtraction.visual_signature || ''}" | p10_in_inv: ${Boolean(p10Prod)} | p10_in_vec_hits: ${p10InVec} | p10_sim: ${p10Sim ?? 'none'}`
+    );
+    console.log(
+      `[PROD_10_EVAL] code_10_kept: ${Boolean(p10Match)} | rank: ${p10Rank ?? 'filtered'} | score: ${p10Match?.match_score ?? 0} | reasons:`,
+      p10Match?.match_reasons ?? ['không vượt qua bộ lọc hoặc mâu thuẫn loại sản phẩm']
     );
 
     // 11. Trả về kết quả hoàn tất

@@ -326,6 +326,7 @@ if (typeof window !== 'undefined') {
     testVisualEmbedding,
     syncBatchEmbeddings,
     searchProductByImage,
+    supabase,
   };
 }
 

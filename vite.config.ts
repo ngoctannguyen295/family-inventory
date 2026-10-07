@@ -1,11 +1,54 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+
+function saveTestAssetPlugin(): Plugin {
+  return {
+    name: 'save-test-asset',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use('/api/save-test-asset', (req, res) => {
+        if (req.method === 'POST') {
+          const chunks: Buffer[] = []
+          req.on('data', (chunk: Buffer) => chunks.push(chunk))
+          req.on('end', () => {
+            try {
+              const body = JSON.parse(Buffer.concat(chunks).toString())
+              const { filename, base64 } = body
+              if (filename && base64) {
+                const targetDir = path.resolve(process.cwd(), 'public', 'test-assets')
+                if (!fs.existsSync(targetDir)) {
+                  fs.mkdirSync(targetDir, { recursive: true })
+                }
+                const targetPath = path.resolve(targetDir, filename)
+                fs.writeFileSync(targetPath, Buffer.from(base64, 'base64'))
+                res.writeHead(200, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ success: true, path: targetPath }))
+                return
+              }
+            } catch (err) {
+              res.writeHead(500, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }))
+              return
+            }
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: 'Missing filename or base64' }))
+          })
+        } else {
+          res.writeHead(405).end()
+        }
+      })
+    },
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
+    saveTestAssetPlugin(),
     VitePWA({
       registerType: 'prompt',
       devOptions: {
@@ -60,3 +103,4 @@ export default defineConfig({
     }),
   ],
 })
+

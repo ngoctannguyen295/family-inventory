@@ -97,8 +97,14 @@ export function App() {
   const [isImageSearchOpen, setIsImageSearchOpen] = useState(false);
   const imageSearchTriggerRef = useRef<HTMLElement | null>(null);
 
-  // 5.7 Quản lý modal Kiểm thử 6 kịch bản Visual Search
-  const [isAiTestModalOpen, setIsAiTestModalOpen] = useState(false);
+  // 5.7 Quản lý modal Kiểm thử 7 kịch bản Visual Search
+  const [isAiTestModalOpen, setIsAiTestModalOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('testModal') === 'true' || params.has('autoRun');
+    }
+    return false;
+  });
 
   // 6. Thông báo Toast
   const [toast, setToast] = useState<ToastNotification | null>(null);

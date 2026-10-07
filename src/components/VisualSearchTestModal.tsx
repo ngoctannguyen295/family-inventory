@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   runEmbeddingTest,
   runScenario1,
@@ -7,6 +7,7 @@ import {
   runScenario4,
   runScenario5,
   runScenario6,
+  runScenario7,
   runVisualSearchScenarios,
   type ScenarioResult,
   type TestSuiteReport,
@@ -24,10 +25,9 @@ export function VisualSearchTestModal({ isOpen, onClose, onSuccessReload }: Visu
   const [currentStep, setCurrentStep] = useState<string | null>(null);
   const [results, setResults] = useState<ScenarioResult[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const autoRunTriggeredRef = useRef(false);
 
-  if (!isOpen) return null;
-
-  const updateScenarioResult = (newRes: ScenarioResult) => {
+  const updateScenarioResult = useCallback((newRes: ScenarioResult) => {
     setResults((prev) => {
       const idx = prev.findIndex((r) => r.scenarioNumber === newRes.scenarioNumber);
       if (idx >= 0) {
@@ -37,27 +37,46 @@ export function VisualSearchTestModal({ isOpen, onClose, onSuccessReload }: Visu
       }
       return [...prev, newRes].sort((a, b) => a.scenarioNumber - b.scenarioNumber);
     });
-  };
+  }, []);
 
-  const handleRunSingle = async (
-    name: string,
-    runner: (onProgress?: (msg: string) => void) => Promise<ScenarioResult>
-  ) => {
-    setIsRunning(true);
-    setCurrentStep(`Đang chạy: ${name}...`);
-    setError(null);
+  const handleRunSingle = useCallback(
+    async (
+      name: string,
+      runner: (onProgress?: (msg: string) => void) => Promise<ScenarioResult>
+    ) => {
+      setIsRunning(true);
+      setCurrentStep(`Đang chạy: ${name}...`);
+      setError(null);
 
-    try {
-      const res = await runner(setCurrentStep);
-      updateScenarioResult(res);
-      if (onSuccessReload) onSuccessReload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setIsRunning(false);
-      setCurrentStep(null);
+      try {
+        const res = await runner(setCurrentStep);
+        updateScenarioResult(res);
+        if (onSuccessReload) onSuccessReload();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setIsRunning(false);
+        setCurrentStep(null);
+      }
+    },
+    [onSuccessReload, updateScenarioResult]
+  );
+
+  // Tự động kích hoạt khi có query param autoRun
+  useEffect(() => {
+    if (!isOpen || autoRunTriggeredRef.current) return;
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('autoRun') === '7') {
+      autoRunTriggeredRef.current = true;
+      const timer = window.setTimeout(() => {
+        void handleRunSingle('Kịch bản 7: Đèn sao (mã 10)', runScenario7);
+      }, 50);
+      return () => window.clearTimeout(timer);
     }
-  };
+  }, [isOpen, handleRunSingle]);
+
+  if (!isOpen) return null;
 
   const handleRunLifecycleTests = async () => {
     setIsRunning(true);
@@ -333,6 +352,24 @@ export function VisualSearchTestModal({ isOpen, onClose, onSuccessReload }: Visu
             >
               Chạy KB 6 (Yumangel F)
             </button>
+            <button
+              type="button"
+              id="btn-run-kb7-disco-light"
+              onClick={() => handleRunSingle('Kịch bản 7: Đèn sao (mã 10)', runScenario7)}
+              disabled={isRunning}
+              style={{
+                backgroundColor: '#fef3c7',
+                color: '#92400e',
+                border: '1px solid #fde68a',
+                borderRadius: '6px',
+                padding: '6px 10px',
+                fontSize: '0.8rem',
+                fontWeight: '600',
+                cursor: isRunning ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Chạy KB 7 (Đèn sao mã 10)
+            </button>
           </div>
 
           {currentStep && (
@@ -410,7 +447,7 @@ export function VisualSearchTestModal({ isOpen, onClose, onSuccessReload }: Visu
                   <div style={{ fontSize: '0.825rem', color: '#334155', marginTop: '4px', lineHeight: '1.4' }}>
                     {s.summary}
                   </div>
-                  <details style={{ marginTop: '4px' }}>
+                  <details open={s.scenarioNumber === 7} style={{ marginTop: '4px' }}>
                     <summary style={{ fontSize: '0.75rem', color: '#64748b', cursor: 'pointer' }}>
                       Chi tiết kỹ thuật (JSON)
                     </summary>

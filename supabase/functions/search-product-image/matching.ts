@@ -150,8 +150,8 @@ export const INCOMPATIBLE_TYPE_GROUPS: string[][] = [
   ['nuoc ngot', 'nuoc suoi', 'nuoc khoang', 'nuoc ep', 'bia', 'ruou', 'tra', 'ca phe', 'sua tuoi', 'sua chua', 'sua dac'],
   // Lương thực tinh bột
   ['gao', 'nep', 'mi goi', 'mi tom', 'bun', 'pho', 'mien', 'banh canh'],
-  // Thiết bị & phụ kiện điện tử
-  ['cap sac', 'day sac', 'day cap', 'cu sac', 'sac nhanh', 'chuot', 'ban phim', 'tai nghe', 'pin du phong'],
+  // Thiết bị & phụ kiện điện tử / chiếu sáng
+  ['cap sac', 'day sac', 'day cap', 'cu sac', 'sac nhanh', 'chuot', 'ban phim', 'tai nghe', 'pin du phong', 'sac du phong', 'den', 'bong den'],
   // Dụng cụ cơ khí, cắt tỉa & thủ công
   ['keo', 'cay keo', 'keo cat', 'dao roc giay', 'kem cat', 'tua vit', 'kim'],
 ];
@@ -483,6 +483,16 @@ export function calculateMatchScore(
     if (objTypeClean.length >= 2 && containsWordBoundary(prodCleanText, objTypeClean)) {
       objectTypeScore = 35;
       reasons.push(`Khớp loại đồ vật "${ai.object_type}"`);
+    } else {
+      // Khớp theo từ khóa cốt lõi của loại đồ vật (ví dụ "đèn" trong "đèn led xoay" khớp "đèn sao")
+      const objTokens = extractSignificantTokens(ai.object_type);
+      const matchedObjTokens = objTokens.filter(
+        (t) => t.length >= 2 && containsWordBoundary(prodCleanText, t)
+      );
+      if (matchedObjTokens.length > 0) {
+        objectTypeScore = Math.min(25, matchedObjTokens.length * 15);
+        reasons.push(`Khớp loại đồ vật ("${matchedObjTokens.join(', ')}")`);
+      }
     }
   }
 
@@ -525,11 +535,11 @@ export function calculateMatchScore(
     visibleEvidenceCount >= 2 ||
     (nameScore >= 15 && visibleEvidenceCount >= 1);
 
-  // Nếu không có bất kỳ bằng chứng văn bản/nhãn hiệu nào, yêu cầu tương đồng thị giác phải thực sự cao (>= 0.65)
-  // để tránh việc đồ vật ngoài kho (như cây kéo) bị gán nhầm vào chuột/cáp do tương đồng mức trung bình (0.50-0.60).
+  // Nếu không có bất kỳ bằng chứng văn bản/nhãn hiệu nào, yêu cầu tương đồng thị giác phải thực sự cao (>= 0.75)
+  // để tránh việc đồ vật ngoài kho hoặc thiết bị khác loại bị gán nhầm do tương đồng trung bình (0.50-0.70).
   const hasStrongVisualEvidence =
     vectorSimilarity !== undefined &&
-    (hasTextOrBrandEvidence ? vectorSimilarity >= 0.50 : vectorSimilarity >= 0.65);
+    (hasTextOrBrandEvidence ? vectorSimilarity >= 0.50 : vectorSimilarity >= 0.75);
 
   const hasSubstantiveEvidence = hasTextOrBrandEvidence || hasStrongVisualEvidence;
 
@@ -543,8 +553,8 @@ export function calculateMatchScore(
         vectorScore = Math.round(vectorSimilarity * 50);
       }
     } else {
-      if (vectorSimilarity >= 0.65) {
-        vectorScore = Math.round(35 + (vectorSimilarity - 0.65) * 60);
+      if (vectorSimilarity >= 0.75) {
+        vectorScore = Math.round(35 + (vectorSimilarity - 0.75) * 60);
       } else {
         vectorScore = Math.round(vectorSimilarity * 40);
       }
