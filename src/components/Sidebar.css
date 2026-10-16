@@ -428,6 +428,12 @@
     display: none !important;
   }
 
+  /* Ẩn phần header-top (gồm tên app trùng lặp và thanh user-profile-bar) trên di động vì ở góc phải trên cùng đã có nút avatar cá nhân */
+  .app-header .header-top,
+  .user-profile-bar {
+    display: none !important;
+  }
+
   /* Thanh AppBar cố định trên cùng màn hình điện thoại */
   .mobile-app-bar {
     display: flex;
