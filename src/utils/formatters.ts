@@ -6,6 +6,30 @@ export function formatCurrency(amount: number): string {
 }
 
 /**
+ * Định dạng giá trị nhập ô tiền tệ với dấu chấm phân cách hàng nghìn (ví dụ: 25000 -> 25.000)
+ */
+export function formatCurrencyInput(val: number | string | null | undefined): string {
+  if (val === null || val === undefined || val === '') return '';
+  const cleanStr = String(val).replace(/\D/g, '');
+  if (!cleanStr) return '';
+  const num = parseInt(cleanStr, 10);
+  if (isNaN(num)) return '';
+  return new Intl.NumberFormat('vi-VN').format(num);
+}
+
+/**
+ * Chuyển chuỗi tiền tệ (có dấu chấm phân cách) thành số nguyên dương (ví dụ: "25.000" -> 25000)
+ */
+export function parseCurrencyInput(val: string | number | null | undefined): number {
+  if (val === null || val === undefined || val === '') return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : Math.max(0, val);
+  const cleanStr = String(val).replace(/\D/g, '');
+  if (!cleanStr) return 0;
+  const num = parseInt(cleanStr, 10);
+  return isNaN(num) ? 0 : Math.max(0, num);
+}
+
+/**
  * Định dạng số lượng tồn kho: giữ tối đa 3 chữ số thập phân có nghĩa
  * Ví dụ: 2.500 -> 2.5, 10 -> 10, 0.125 -> 0.125
  */

@@ -702,3 +702,67 @@
   align-items: center;
   gap: 3px;
 }
+
+/* Khung ô nhập tiền tệ và ký hiệu ₫ */
+.pf-currency-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.pf-currency-input {
+  padding-right: 38px;
+  font-weight: 600;
+  font-feature-settings: 'tnum';
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.pf-currency-suffix {
+  position: absolute;
+  right: 14px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-primary, #0284c7);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Badge hiển thị tiền tệ dễ đọc (VD: 25.000 ₫) */
+.pf-price-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 5px 10px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #166534;
+  animation: pfFadeIn 0.15s ease-out;
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.pf-price-live-badge strong {
+  font-weight: 700;
+  color: #15803d;
+  font-size: 13.5px;
+  font-feature-settings: 'tnum';
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-price-badge-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.pf-price-badge-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+

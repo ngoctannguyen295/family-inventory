@@ -8,6 +8,7 @@ import {
   type UpdateProductInput,
 } from '../services/productService';
 import { validateImageFile, uploadProductImage } from '../services/storageService';
+import { formatCurrency, formatCurrencyInput, parseCurrencyInput } from '../utils/formatters';
 import { ProductImage } from './ProductImage';
 import './ProductFormModal.css';
 
@@ -165,19 +166,29 @@ function ProductFormDialog({
   });
 
   const [purchasePrice, setPurchasePrice] = useState(() => {
-    if (productToEdit) return String(productToEdit.purchasePrice);
+    if (productToEdit) return formatCurrencyInput(productToEdit.purchasePrice);
     try {
       const draft = sessionStorage.getItem(DRAFT_KEY);
-      if (draft) return JSON.parse(draft).purchasePrice ?? '';
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed.purchasePrice !== undefined && parsed.purchasePrice !== '') {
+          return formatCurrencyInput(parsed.purchasePrice);
+        }
+      }
     } catch { /* ignore */ }
     return '';
   });
 
   const [salePrice, setSalePrice] = useState(() => {
-    if (productToEdit) return String(productToEdit.salePrice);
+    if (productToEdit) return formatCurrencyInput(productToEdit.salePrice);
     try {
       const draft = sessionStorage.getItem(DRAFT_KEY);
-      if (draft) return JSON.parse(draft).salePrice ?? '';
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed.salePrice !== undefined && parsed.salePrice !== '') {
+          return formatCurrencyInput(parsed.salePrice);
+        }
+      }
     } catch { /* ignore */ }
     return '';
   });
@@ -237,8 +248,8 @@ function ProductFormDialog({
             category !== productToEdit.category ||
             unit !== productToEdit.unit ||
             (barcode || '') !== (productToEdit.barcode || '') ||
-            purchasePrice !== String(productToEdit.purchasePrice) ||
-            salePrice !== String(productToEdit.salePrice) ||
+            parseCurrencyInput(purchasePrice) !== productToEdit.purchasePrice ||
+            parseCurrencyInput(salePrice) !== productToEdit.salePrice ||
             stock !== String(productToEdit.stock) ||
             (notes || '') !== (productToEdit.notes || '') ||
             selectedFile !== null)
@@ -440,14 +451,88 @@ function ProductFormDialog({
     return { num, error: null };
   };
 
+  // Xử lý thay đổi ô nhập tiền tệ và giữ vị trí con trỏ hợp lý
+  const handlePriceChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    setter: (val: string) => void,
+    fieldKey: 'purchasePrice' | 'salePrice'
+  ) => {
+    const inputEl = e.target;
+    const rawVal = inputEl.value;
+    const cursorEnd = inputEl.selectionEnd ?? rawVal.length;
+    const digitsBeforeCursor = rawVal.slice(0, cursorEnd).replace(/\D/g, '').length;
+
+    const formatted = formatCurrencyInput(rawVal);
+    setter(formatted);
+    if (fieldErrors[fieldKey]) {
+      setFieldErrors((prev) => ({ ...prev, [fieldKey]: undefined }));
+    }
+
+    requestAnimationFrame(() => {
+      if (!inputEl) return;
+      let targetPos = 0;
+      let countedDigits = 0;
+      for (let i = 0; i < formatted.length; i++) {
+        if (/\d/.test(formatted[i])) {
+          countedDigits++;
+        }
+        if (countedDigits === digitsBeforeCursor) {
+          targetPos = i + 1;
+          break;
+        }
+      }
+      if (countedDigits < digitsBeforeCursor) {
+        targetPos = formatted.length;
+      }
+      try {
+        inputEl.setSelectionRange(targetPos, targetPos);
+      } catch {
+        /* ignore */
+      }
+    });
+  };
+
+  // Xử lý phím Backspace khi đứng ngay sau dấu chấm phân cách hàng nghìn
+  const handlePriceKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    currentValue: string,
+    setter: (val: string) => void,
+    fieldKey: 'purchasePrice' | 'salePrice'
+  ) => {
+    if (e.key === 'Backspace') {
+      const inputEl = e.currentTarget;
+      const { selectionStart, selectionEnd } = inputEl;
+      if (selectionStart !== null && selectionStart === selectionEnd && selectionStart > 0) {
+        if (currentValue[selectionStart - 1] === '.') {
+          e.preventDefault();
+          const before = currentValue.slice(0, selectionStart - 2);
+          const after = currentValue.slice(selectionStart);
+          const newRaw = before + after;
+          const formatted = formatCurrencyInput(newRaw);
+          setter(formatted);
+          if (fieldErrors[fieldKey]) {
+            setFieldErrors((prev) => ({ ...prev, [fieldKey]: undefined }));
+          }
+          requestAnimationFrame(() => {
+            const newPos = Math.max(0, selectionStart - 2);
+            try {
+              inputEl.setSelectionRange(newPos, newPos);
+            } catch {
+              /* ignore */
+            }
+          });
+        }
+      }
+    }
+  };
+
   // Cảnh báo bán lỗ (chỉ cảnh báo, vẫn cho lưu)
-  const numPurchase = Number(purchasePrice.trim());
-  const numSale = Number(salePrice.trim());
+  const numPurchase = parseCurrencyInput(purchasePrice);
+  const numSale = parseCurrencyInput(salePrice);
   const isSellingAtLoss =
-    !isNaN(numPurchase) &&
-    !isNaN(numSale) &&
     purchasePrice.trim() !== '' &&
     salePrice.trim() !== '' &&
+    numPurchase > 0 &&
     numSale < numPurchase;
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -483,16 +568,24 @@ function ProductFormDialog({
       errors.unit = 'Vui lòng nhập đơn vị tính (ví dụ: chai, gói, kg).';
     }
 
-    // 2. Kiểm tra giá nhập (numeric 14,2)
-    const validPurchase = validateNumeric(purchasePrice, 'Giá nhập', 2, 12);
-    if (validPurchase.error) {
-      errors.purchasePrice = validPurchase.error;
+    // 2. Kiểm tra giá nhập (không âm, tối đa 999.999.999.999 ₫)
+    const validPurchaseNum = parseCurrencyInput(purchasePrice);
+    if (!purchasePrice.trim()) {
+      errors.purchasePrice = 'Vui lòng nhập giá nhập (giá vốn).';
+    } else if (validPurchaseNum < 0) {
+      errors.purchasePrice = 'Giá nhập không thể là số âm.';
+    } else if (validPurchaseNum > 999999999999) {
+      errors.purchasePrice = 'Giá nhập vượt quá số lượng chữ số cho phép (tối đa 12 số nguyên).';
     }
 
-    // 3. Kiểm tra giá bán (numeric 14,2)
-    const validSale = validateNumeric(salePrice, 'Giá bán', 2, 12);
-    if (validSale.error) {
-      errors.salePrice = validSale.error;
+    // 3. Kiểm tra giá bán (không âm, tối đa 999.999.999.999 ₫)
+    const validSaleNum = parseCurrencyInput(salePrice);
+    if (!salePrice.trim()) {
+      errors.salePrice = 'Vui lòng nhập giá bán.';
+    } else if (validSaleNum < 0) {
+      errors.salePrice = 'Giá bán không thể là số âm.';
+    } else if (validSaleNum > 999999999999) {
+      errors.salePrice = 'Giá bán vượt quá số lượng chữ số cho phép (tối đa 12 số nguyên).';
     }
 
     // 4. Kiểm tra số lượng tồn (numeric 14,3)
@@ -557,8 +650,8 @@ function ProductFormDialog({
           name: trimmedName,
           category: trimmedCategory,
           unit: trimmedUnit,
-          purchasePrice: validPurchase.num,
-          salePrice: validSale.num,
+          purchasePrice: validPurchaseNum,
+          salePrice: validSaleNum,
           stock: validStock.num,
           notes: notes.trim(),
           imageUrl: finalImagePath,
@@ -599,8 +692,8 @@ function ProductFormDialog({
           name: trimmedName,
           category: trimmedCategory,
           unit: trimmedUnit,
-          purchasePrice: validPurchase.num,
-          salePrice: validSale.num,
+          purchasePrice: validPurchaseNum,
+          salePrice: validSaleNum,
           stock: validStock.num,
           notes: notes.trim(),
           imageUrl: finalImagePath,
@@ -983,24 +1076,36 @@ function ProductFormDialog({
                 <label htmlFor="product-purchase-price" className="pf-label">
                   Giá nhập (₫) <span className="pf-required-star">*</span>
                 </label>
-                <input
-                  id="product-purchase-price"
-                  name="purchasePrice"
-                  type="text"
-                  inputMode="decimal"
-                  className={`pf-input ${fieldErrors.purchasePrice ? 'pf-input-error' : ''}`}
-                  value={purchasePrice}
-                  onChange={(e) => {
-                    setPurchasePrice(e.target.value);
-                    if (fieldErrors.purchasePrice) setFieldErrors((prev) => ({ ...prev, purchasePrice: undefined }));
-                  }}
-                  placeholder="Ví dụ: 25000"
-                  required
-                  disabled={isSubmitting}
-                  autoComplete="off"
-                />
-                {fieldErrors.purchasePrice && (
+                <div className="pf-currency-input-wrapper">
+                  <input
+                    id="product-purchase-price"
+                    name="purchasePrice"
+                    type="text"
+                    inputMode="numeric"
+                    className={`pf-input pf-currency-input ${fieldErrors.purchasePrice ? 'pf-input-error' : ''}`}
+                    value={purchasePrice}
+                    onChange={(e) => handlePriceChange(e, setPurchasePrice, 'purchasePrice')}
+                    onKeyDown={(e) => handlePriceKeyDown(e, purchasePrice, setPurchasePrice, 'purchasePrice')}
+                    placeholder="Ví dụ: 25.000"
+                    required
+                    disabled={isSubmitting}
+                    autoComplete="off"
+                  />
+                  <span className="pf-currency-suffix" aria-hidden="true">₫</span>
+                </div>
+                {fieldErrors.purchasePrice ? (
                   <span className="pf-field-error">{fieldErrors.purchasePrice}</span>
+                ) : purchasePrice ? (
+                  <div className="pf-price-live-badge">
+                    <span className="pf-price-badge-icon" aria-hidden="true">🏷️</span>
+                    <span className="pf-price-badge-text">
+                      Hiển thị: <strong>{formatCurrency(numPurchase)}</strong>
+                    </span>
+                  </div>
+                ) : (
+                  <p className="pf-hint-text">
+                    💡 Nhập giá vốn (ví dụ: <code>25.000</code>).
+                  </p>
                 )}
               </div>
 
@@ -1009,24 +1114,36 @@ function ProductFormDialog({
                 <label htmlFor="product-sale-price" className="pf-label">
                   Giá bán (₫) <span className="pf-required-star">*</span>
                 </label>
-                <input
-                  id="product-sale-price"
-                  name="salePrice"
-                  type="text"
-                  inputMode="decimal"
-                  className={`pf-input ${fieldErrors.salePrice ? 'pf-input-error' : ''}`}
-                  value={salePrice}
-                  onChange={(e) => {
-                    setSalePrice(e.target.value);
-                    if (fieldErrors.salePrice) setFieldErrors((prev) => ({ ...prev, salePrice: undefined }));
-                  }}
-                  placeholder="Ví dụ: 30000"
-                  required
-                  disabled={isSubmitting}
-                  autoComplete="off"
-                />
-                {fieldErrors.salePrice && (
+                <div className="pf-currency-input-wrapper">
+                  <input
+                    id="product-sale-price"
+                    name="salePrice"
+                    type="text"
+                    inputMode="numeric"
+                    className={`pf-input pf-currency-input ${fieldErrors.salePrice ? 'pf-input-error' : ''}`}
+                    value={salePrice}
+                    onChange={(e) => handlePriceChange(e, setSalePrice, 'salePrice')}
+                    onKeyDown={(e) => handlePriceKeyDown(e, salePrice, setSalePrice, 'salePrice')}
+                    placeholder="Ví dụ: 30.000"
+                    required
+                    disabled={isSubmitting}
+                    autoComplete="off"
+                  />
+                  <span className="pf-currency-suffix" aria-hidden="true">₫</span>
+                </div>
+                {fieldErrors.salePrice ? (
                   <span className="pf-field-error">{fieldErrors.salePrice}</span>
+                ) : salePrice ? (
+                  <div className="pf-price-live-badge">
+                    <span className="pf-price-badge-icon" aria-hidden="true">🏷️</span>
+                    <span className="pf-price-badge-text">
+                      Hiển thị: <strong>{formatCurrency(numSale)}</strong>
+                    </span>
+                  </div>
+                ) : (
+                  <p className="pf-hint-text">
+                    💡 Nhập giá bán niêm yết (ví dụ: <code>30.000</code>).
+                  </p>
                 )}
               </div>
             </div>

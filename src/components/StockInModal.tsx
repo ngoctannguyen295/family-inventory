@@ -1,7 +1,12 @@
 import { useState, useEffect, useMemo, useRef, type FormEvent, type KeyboardEvent } from 'react';
 import type { Product } from '../types/product';
 import { updateProduct } from '../services/productService';
-import { formatCurrency, removeVietnameseTones } from '../utils/formatters';
+import {
+  formatCurrency,
+  formatCurrencyInput,
+  parseCurrencyInput,
+  removeVietnameseTones,
+} from '../utils/formatters';
 import { ProductImage } from './ProductImage';
 import './StockInModal.css';
 
@@ -34,10 +39,10 @@ function StockInDialog({
   const [quantityMode, setQuantityMode] = useState<'add' | 'set'>('add');
   const [quantityInput, setQuantityInput] = useState<string>('1');
   const [purchasePriceInput, setPurchasePriceInput] = useState<string>(() =>
-    initialProduct ? String(initialProduct.purchasePrice) : ''
+    initialProduct ? formatCurrencyInput(initialProduct.purchasePrice) : ''
   );
   const [salePriceInput, setSalePriceInput] = useState<string>(() =>
-    initialProduct ? String(initialProduct.salePrice) : ''
+    initialProduct ? formatCurrencyInput(initialProduct.salePrice) : ''
   );
   const [notesInput, setNotesInput] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -61,8 +66,8 @@ function StockInDialog({
   // Xử lý chọn một sản phẩm từ danh sách tìm kiếm
   const handleSelectProduct = (prod: Product) => {
     setSelectedProduct(prod);
-    setPurchasePriceInput(String(prod.purchasePrice));
-    setSalePriceInput(String(prod.salePrice));
+    setPurchasePriceInput(formatCurrencyInput(prod.purchasePrice));
+    setSalePriceInput(formatCurrencyInput(prod.salePrice));
     setQuantityInput('1');
     setQuantityMode('add');
     setErrorMessage(null);
@@ -97,9 +102,76 @@ function StockInDialog({
   const calculatedNewStock = quantityMode === 'add' ? currentStock + parsedQty : parsedQty;
 
   // Tính toán giá và tỷ suất lợi nhuận
-  const parsedPurchasePrice = parseFloat(purchasePriceInput) || 0;
-  const parsedSalePrice = parseFloat(salePriceInput) || 0;
+  const parsedPurchasePrice = parseCurrencyInput(purchasePriceInput);
+  const parsedSalePrice = parseCurrencyInput(salePriceInput);
   const profitMargin = parsedSalePrice - parsedPurchasePrice;
+
+  // Xử lý thay đổi ô nhập tiền tệ và giữ vị trí con trỏ hợp lý
+  const handlePriceChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    setter: (val: string) => void
+  ) => {
+    const inputEl = e.target;
+    const rawVal = inputEl.value;
+    const cursorEnd = inputEl.selectionEnd ?? rawVal.length;
+    const digitsBeforeCursor = rawVal.slice(0, cursorEnd).replace(/\D/g, '').length;
+
+    const formatted = formatCurrencyInput(rawVal);
+    setter(formatted);
+
+    requestAnimationFrame(() => {
+      if (!inputEl) return;
+      let targetPos = 0;
+      let countedDigits = 0;
+      for (let i = 0; i < formatted.length; i++) {
+        if (/\d/.test(formatted[i])) {
+          countedDigits++;
+        }
+        if (countedDigits === digitsBeforeCursor) {
+          targetPos = i + 1;
+          break;
+        }
+      }
+      if (countedDigits < digitsBeforeCursor) {
+        targetPos = formatted.length;
+      }
+      try {
+        inputEl.setSelectionRange(targetPos, targetPos);
+      } catch {
+        /* ignore */
+      }
+    });
+  };
+
+  // Xử lý phím Backspace khi đứng ngay sau dấu chấm phân cách hàng nghìn
+  const handlePriceKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    currentValue: string,
+    setter: (val: string) => void
+  ) => {
+    if (e.key === 'Backspace') {
+      const inputEl = e.currentTarget;
+      const { selectionStart, selectionEnd } = inputEl;
+      if (selectionStart !== null && selectionStart === selectionEnd && selectionStart > 0) {
+        if (currentValue[selectionStart - 1] === '.') {
+          e.preventDefault();
+          const before = currentValue.slice(0, selectionStart - 2);
+          const after = currentValue.slice(selectionStart);
+          const newRaw = before + after;
+          const formatted = formatCurrencyInput(newRaw);
+          setter(formatted);
+          requestAnimationFrame(() => {
+            const newPos = Math.max(0, selectionStart - 2);
+            try {
+              inputEl.setSelectionRange(newPos, newPos);
+            } catch {
+              /* ignore */
+            }
+          });
+        }
+      }
+    }
+  };
 
   // Xử lý tăng / giảm nhanh số lượng
   const handleAdjustQty = (delta: number) => {
@@ -484,19 +556,19 @@ function StockInDialog({
                     <div className="si-price-input-box">
                       <input
                         id="si-purchase-price"
-                        type="number"
-                        min="0"
-                        step="1000"
+                        type="text"
+                        inputMode="numeric"
                         className="si-price-input"
                         value={purchasePriceInput}
-                        onChange={(e) => setPurchasePriceInput(e.target.value)}
-                        placeholder="0"
+                        onChange={(e) => handlePriceChange(e, setPurchasePriceInput)}
+                        onKeyDown={(e) => handlePriceKeyDown(e, purchasePriceInput, setPurchasePriceInput)}
+                        placeholder="Ví dụ: 25.000"
                         required
                       />
                       <span className="si-currency-symbol">₫</span>
                     </div>
                     <span className="si-price-formatted-preview">
-                      {formatCurrency(parsedPurchasePrice)}
+                      🏷️ Hiển thị: <strong>{formatCurrency(parsedPurchasePrice)}</strong>
                     </span>
                   </div>
 
@@ -511,19 +583,19 @@ function StockInDialog({
                     <div className="si-price-input-box">
                       <input
                         id="si-sale-price"
-                        type="number"
-                        min="0"
-                        step="1000"
+                        type="text"
+                        inputMode="numeric"
                         className="si-price-input"
                         value={salePriceInput}
-                        onChange={(e) => setSalePriceInput(e.target.value)}
-                        placeholder="0"
+                        onChange={(e) => handlePriceChange(e, setSalePriceInput)}
+                        onKeyDown={(e) => handlePriceKeyDown(e, salePriceInput, setSalePriceInput)}
+                        placeholder="Ví dụ: 30.000"
                         required
                       />
                       <span className="si-currency-symbol">₫</span>
                     </div>
                     <span className="si-price-formatted-preview">
-                      {formatCurrency(parsedSalePrice)}
+                      🏷️ Hiển thị: <strong>{formatCurrency(parsedSalePrice)}</strong>
                     </span>
                   </div>
                 </div>
