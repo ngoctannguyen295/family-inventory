@@ -8,6 +8,7 @@ import {
   runScenario5,
   runScenario6,
   runScenario7,
+  runInspectTargetProducts,
   runVisualSearchScenarios,
   type ScenarioResult,
   type TestSuiteReport,
@@ -67,13 +68,30 @@ export function VisualSearchTestModal({ isOpen, onClose, onSuccessReload }: Visu
     if (!isOpen || autoRunTriggeredRef.current) return;
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get('autoRun') === '7') {
-      autoRunTriggeredRef.current = true;
-      const timer = window.setTimeout(() => {
+    const autoRun = params.get('autoRun');
+    if (!autoRun) return;
+
+    autoRunTriggeredRef.current = true;
+    const timer = window.setTimeout(() => {
+      if (autoRun === 'inspect') {
+        void handleRunSingle('Kiểm tra 5 sản phẩm (10, 09, 08, C01, C02)', runInspectTargetProducts);
+      } else if (autoRun === '1') {
+        void handleRunSingle('Kịch bản 1: Món 01 không nhãn', runScenario1);
+      } else if (autoRun === '2') {
+        void handleRunSingle('Kịch bản 2: Type-C vs Lightning', runScenario2);
+      } else if (autoRun === '3') {
+        void handleRunSingle('Kịch bản 3: Đổi ảnh C01', runScenario3);
+      } else if (autoRun === '4') {
+        void handleRunSingle('Kịch bản 4: Cây kéo ngoài kho', runScenario4);
+      } else if (autoRun === '5') {
+        void handleRunSingle('Kịch bản 5: Xóa mềm', runScenario5);
+      } else if (autoRun === '6') {
+        void handleRunSingle('Kịch bản 6: Yumangel F', runScenario6);
+      } else if (autoRun === '7') {
         void handleRunSingle('Kịch bản 7: Đèn sao (mã 10)', runScenario7);
-      }, 50);
-      return () => window.clearTimeout(timer);
-    }
+      }
+    }, 50);
+    return () => window.clearTimeout(timer);
   }, [isOpen, handleRunSingle]);
 
   if (!isOpen) return null;
@@ -369,6 +387,24 @@ export function VisualSearchTestModal({ isOpen, onClose, onSuccessReload }: Visu
               }}
             >
               Chạy KB 7 (Đèn sao mã 10)
+            </button>
+            <button
+              type="button"
+              id="btn-run-kb8-inspect"
+              onClick={() => handleRunSingle('Kiểm tra 5 sản phẩm (10, 09, 08, C01, C02)', runInspectTargetProducts)}
+              disabled={isRunning}
+              style={{
+                backgroundColor: '#e0e7ff',
+                color: '#3730a3',
+                border: '1px solid #c7d2fe',
+                borderRadius: '6px',
+                padding: '6px 10px',
+                fontSize: '0.8rem',
+                fontWeight: '600',
+                cursor: isRunning ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Kiểm tra 5 mã kho (10, 09, 08, C01, C02)
             </button>
           </div>
 

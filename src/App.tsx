@@ -3,7 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import type { Product } from './types/product';
 import type { FamilyMember } from './types/database';
-import { removeVietnameseTones } from './utils/formatters';
+import { formatCurrency, removeVietnameseTones } from './utils/formatters';
 import { Header } from './components/Header';
 import { Login } from './components/Login';
 import { SearchAndFilter } from './components/SearchAndFilter';
@@ -12,10 +12,13 @@ import { ProductDetailModal } from './components/ProductDetailModal';
 import { ProductDeleteConfirmModal } from './components/ProductDeleteConfirmModal';
 import { DeletedProductsModal } from './components/DeletedProductsModal';
 import { ProductFormModal } from './components/ProductFormModal';
+import { StockInModal } from './components/StockInModal';
 import { ProductHistoryModal } from './components/ProductHistoryModal';
 import { BarcodeScannerModal } from './components/BarcodeScannerModal';
 import { ImageSearchModal } from './components/ImageSearchModal';
 import { VisualSearchTestModal } from './components/VisualSearchTestModal';
+import { UserProfilePage } from './components/UserProfilePage';
+import { Sidebar } from './components/Sidebar';
 import { OfflineBanner } from './components/OfflineBanner';
 import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
@@ -74,12 +77,16 @@ export function App() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // 5.2 Quản lý modal Thêm / Sửa sản phẩm
+  // 5.2 Quản lý modal Thêm sản phẩm mới / Sửa thông tin sản phẩm
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
   const [isFormDirty, setIsFormDirty] = useState(false);
   const addBtnRef = useRef<HTMLButtonElement | null>(null);
   const activeTriggerRef = useRef<HTMLElement | null>(null);
+
+  // 5.2.1 Quản lý modal Nhập kho (chỉnh số lượng và giá sản phẩm đã có sẵn)
+  const [isStockInModalOpen, setIsStockInModalOpen] = useState(false);
+  const [stockInTargetProduct, setStockInTargetProduct] = useState<Product | null>(null);
 
   // 5.3 Quản lý trạng thái mạng trực tuyến
   const isOnline = useOnlineStatus();
@@ -105,6 +112,10 @@ export function App() {
     }
     return false;
   });
+
+  // 5.8 Quản lý điều hướng màn hình (Kho hàng vs Chỉnh sửa hồ sơ cá nhân)
+  const [currentView, setCurrentView] = useState<'inventory' | 'profile'>('inventory');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // 6. Thông báo Toast
   const [toast, setToast] = useState<ToastNotification | null>(null);
@@ -151,6 +162,8 @@ export function App() {
         setIsDeletedModalOpen(false);
         setIsModalOpen(false);
         setProductToEdit(null);
+        setIsStockInModalOpen(false);
+        setStockInTargetProduct(null);
         setIsHistoryModalOpen(false);
         setSelectedHistoryProduct(null);
         setIsBarcodeScannerOpen(false);
@@ -290,6 +303,8 @@ export function App() {
     setIsDeletedModalOpen(false);
     setIsModalOpen(false);
     setProductToEdit(null);
+    setIsStockInModalOpen(false);
+    setStockInTargetProduct(null);
     setIsHistoryModalOpen(false);
     setSelectedHistoryProduct(null);
     setIsBarcodeScannerOpen(false);
@@ -359,6 +374,40 @@ export function App() {
     setProductToEdit(null);
     setIsFormDirty(false);
   }, []);
+
+  // Mở modal Nhập kho (chỉnh số lượng và giá của sản phẩm đã có sẵn)
+  const handleOpenStockIn = useCallback((targetProduct?: Product | null) => {
+    setStockInTargetProduct(targetProduct || null);
+    setSelectedDetailProduct(null);
+    setIsStockInModalOpen(true);
+  }, []);
+
+  // Đóng modal Nhập kho
+  const handleCloseStockIn = useCallback(() => {
+    setIsStockInModalOpen(false);
+    setStockInTargetProduct(null);
+  }, []);
+
+  // Xử lý khi Nhập kho thành công
+  const handleStockInSuccess = useCallback(
+    (updatedProduct: Product, oldStock: number, newStock: number) => {
+      // Cập nhật ngay trong state products để phản hồi mượt mà không cần đợi reload
+      setProducts((prev) =>
+        prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p))
+      );
+
+      // Tải lại toàn bộ dữ liệu từ server để đồng bộ
+      if (member?.can_edit) {
+        reloadProducts(true);
+      }
+
+      showToast({
+        text: `Đã nhập kho thành công cho "${updatedProduct.name}"! Tồn kho mới: ${newStock} ${updatedProduct.unit} (Trước: ${oldStock}). Giá bán: ${formatCurrency(updatedProduct.salePrice)}.`,
+        type: 'success',
+      });
+    },
+    [member?.can_edit, reloadProducts, showToast]
+  );
 
   // Mở modal Xác nhận xóa mềm
   const handleOpenDeleteConfirm = useCallback(() => {
@@ -512,6 +561,23 @@ export function App() {
     setSearchTerm(matchedProduct.barcode || matchedProduct.code);
     setSelectedCategory('ALL');
     setSelectedDetailProduct(matchedProduct);
+  }, []);
+
+  // Chuyển sang trang Chỉnh sửa hồ sơ người dùng
+  const handleOpenProfile = useCallback(() => {
+    setCurrentView('profile');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  // Quay lại trang danh mục kho hàng
+  const handleBackToInventory = useCallback(() => {
+    setCurrentView('inventory');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  // Cập nhật thông tin thành viên sau khi lưu hồ sơ
+  const handleProfileUpdated = useCallback((updatedMember: FamilyMember) => {
+    setMember(updatedMember);
   }, []);
 
   // Xử lý sau khi lưu sản phẩm thành công
@@ -734,18 +800,52 @@ export function App() {
     );
   }
 
-  // MÀN HÌNH 7: Thành viên hợp lệ -> Hiển thị ứng dụng Kho gia đình
+  // MÀN HÌNH 7: Thành viên hợp lệ -> Hiển thị ứng dụng với thanh Menu bên trái (Sidebar)
   return (
-    <div className="app-container">
-      <div className="app-content">
-        <Header
-          totalCount={products.length}
-          member={member}
-          onSignOut={handleSignOut}
-          isSigningOut={isSigningOut}
-          onOpenAddModal={handleOpenAddModal}
-          addBtnRef={addBtnRef}
-        />
+    <div className="app-layout-wrapper">
+      {/* Thanh menu bên trái (Sidebar) */}
+      <Sidebar
+        currentView={currentView}
+        totalProducts={products.length}
+        deletedCount={deletedProducts.length}
+        member={member}
+        canEdit={canEdit}
+        isOpenMobile={isMobileMenuOpen}
+        onCloseMobile={() => setIsMobileMenuOpen(false)}
+        onNavigateInventory={handleBackToInventory}
+        onNavigateProfile={handleOpenProfile}
+        onOpenStockIn={() => handleOpenStockIn(null)}
+        onOpenAddNewProduct={handleOpenAddModal}
+        onOpenImageSearch={() => handleOpenImageSearch(addBtnRef.current || document.body)}
+        onOpenBarcodeScanner={() => handleOpenBarcodeScanner(addBtnRef.current || document.body)}
+        onOpenTrash={() => setIsDeletedModalOpen(true)}
+        onSignOut={handleSignOut}
+        isSigningOut={isSigningOut}
+      />
+
+      <div className="app-main-content-column">
+        {currentView === 'profile' && member ? (
+          <UserProfilePage
+            member={member}
+            userEmail={session?.user?.email}
+            onBackToHome={handleBackToInventory}
+            onProfileUpdated={handleProfileUpdated}
+            onSignOut={handleSignOut}
+            isSigningOut={isSigningOut}
+            onShowToast={showToast}
+          />
+        ) : (
+          <div className="app-content">
+            <Header
+              totalCount={products.length}
+              member={member}
+              onSignOut={handleSignOut}
+              isSigningOut={isSigningOut}
+              onOpenAddModal={handleOpenAddModal}
+              addBtnRef={addBtnRef}
+              onOpenProfile={handleOpenProfile}
+              onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
+            />
 
         {/* Thông báo lỗi khi đăng xuất thất bại */}
         {signOutError && (
@@ -882,6 +982,8 @@ export function App() {
             </div>
           )}
         </footer>
+          </div>
+        )}
       </div>
 
       {/* Modal Chi tiết sản phẩm (khi bấm vào bất kỳ thẻ sản phẩm nào) */}
@@ -892,6 +994,7 @@ export function App() {
           canEdit={canEdit}
           onClose={handleCloseDetailModal}
           onEdit={(prod, triggerEl) => handleOpenEditModal(prod, triggerEl)}
+          onStockIn={(prod) => handleOpenStockIn(prod)}
           onViewHistory={(prod, triggerEl) => handleOpenHistoryModal(prod, triggerEl)}
           onOpenDeleteConfirm={handleOpenDeleteConfirm}
           triggerElementRef={detailTriggerRef}
@@ -930,12 +1033,23 @@ export function App() {
         isOpen={isModalOpen}
         productToEdit={productToEdit}
         existingCategories={categories}
+        existingProducts={products}
         userId={userId}
         onClose={handleCloseModal}
         onSaveSuccess={handleSaveSuccess}
         triggerElementRef={activeTriggerRef}
         isOnline={isOnline}
         onDirtyChange={setIsFormDirty}
+      />
+
+      {/* Modal Nhập kho (chỉnh số lượng và giá của sản phẩm đã có sẵn) */}
+      <StockInModal
+        isOpen={isStockInModalOpen}
+        onClose={handleCloseStockIn}
+        products={products}
+        initialProduct={stockInTargetProduct}
+        onStockInSuccess={handleStockInSuccess}
+        isOnline={isOnline}
       />
 
       {/* Modal Lịch sử thay đổi sản phẩm */}

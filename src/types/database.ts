@@ -3,6 +3,7 @@ import type { Product } from './product';
 export interface FamilyMember {
   user_id: string;
   display_name: string;
+  phone?: string | null;
   can_edit: boolean;
   is_active: boolean;
   created_at: string;

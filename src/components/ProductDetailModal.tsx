@@ -9,6 +9,7 @@ interface ProductDetailModalProps {
   canEdit?: boolean;
   onClose: () => void;
   onEdit?: (product: Product, triggerEl: HTMLElement) => void;
+  onStockIn?: (product: Product, triggerEl: HTMLElement) => void;
   onViewHistory?: (product: Product, triggerEl: HTMLElement) => void;
   onOpenDeleteConfirm?: (product: Product) => void;
   triggerElementRef?: React.RefObject<HTMLElement | null>;
@@ -20,6 +21,7 @@ export function ProductDetailModal({
   canEdit,
   onClose,
   onEdit,
+  onStockIn,
   onViewHistory,
   onOpenDeleteConfirm,
   triggerElementRef,
@@ -216,6 +218,31 @@ export function ProductDetailModal({
           </div>
 
           <div className="footer-right-actions">
+            {canEdit && onStockIn && (
+              <button
+                type="button"
+                className="btn-stock-in-action"
+                onClick={(e) => onStockIn(product, e.currentTarget)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 14px',
+                  borderRadius: '8px',
+                  background: '#f0f9ff',
+                  color: '#0284c7',
+                  border: '1.5px solid #bae6fd',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+                title="Nhập thêm hàng hoặc chỉnh sửa số lượng, giá của sản phẩm này"
+              >
+                <span>📥</span>
+                <span>Nhập kho</span>
+              </button>
+            )}
             {canEdit && onEdit && (
               <button
                 type="button"

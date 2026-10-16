@@ -15,6 +15,7 @@ interface ProductFormModalProps {
   isOpen: boolean;
   productToEdit?: Product | null;
   existingCategories: string[];
+  existingProducts?: Product[];
   userId?: string | null;
   onClose: () => void;
   onSaveSuccess: (savedProduct: Product, isEdit: boolean) => void;
@@ -23,12 +24,52 @@ interface ProductFormModalProps {
   onDirtyChange?: (isDirty: boolean) => void;
 }
 
-// Gợi ý các đơn vị tính thông dụng trong tạp hóa
-const COMMON_UNITS = ['gói', 'chai', 'lon', 'hộp', 'kg', 'túi', 'lọ', 'thùng', 'bịch', 'cây'];
+// Gợi ý các đơn vị tính thông dụng theo thứ tự ưu tiên
+const COMMON_UNITS = ['chai', 'gói', 'hộp', 'kg', 'lon', 'túi', 'thùng', 'bịch', 'cây', 'lọ', 'cái'];
+
+const DRAFT_KEY = 'family_inventory_new_product_draft';
+const LAST_CATEGORY_KEY = 'family_inventory_last_category';
+const LAST_UNIT_KEY = 'family_inventory_last_unit';
+
+/**
+ * Tự động sinh mã hàng mới (SKU) kế tiếp không trùng lặp
+ */
+function generateNextProductCode(existingProducts: Product[] = []): string {
+  const existingCodes = new Set(
+    existingProducts
+      .filter((p) => p && p.code)
+      .map((p) => p.code.trim().toUpperCase())
+  );
+
+  let maxSpNumber = 0;
+  const spRegex = /^SP0*(\d+)$/i;
+
+  for (const p of existingProducts) {
+    if (!p.code) continue;
+    const match = p.code.trim().match(spRegex);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > maxSpNumber) {
+        maxSpNumber = num;
+      }
+    }
+  }
+
+  let nextNum = maxSpNumber > 0 ? maxSpNumber + 1 : 1;
+  let candidate = `SP${String(nextNum).padStart(3, '0')}`;
+
+  while (existingCodes.has(candidate.toUpperCase())) {
+    nextNum++;
+    candidate = `SP${String(nextNum).padStart(3, '0')}`;
+  }
+
+  return candidate;
+}
 
 interface FormDialogProps {
   productToEdit?: Product | null;
   existingCategories: string[];
+  existingProducts?: Product[];
   userId?: string | null;
   onClose: () => void;
   onSaveSuccess: (savedProduct: Product, isEdit: boolean) => void;
@@ -37,11 +78,10 @@ interface FormDialogProps {
   onDirtyChange?: (isDirty: boolean) => void;
 }
 
-const DRAFT_KEY = 'family_inventory_new_product_draft';
-
 function ProductFormDialog({
   productToEdit,
   existingCategories,
+  existingProducts = [],
   onClose,
   onSaveSuccess,
   triggerElementRef,
@@ -50,14 +90,17 @@ function ProductFormDialog({
 }: FormDialogProps) {
   const isEdit = Boolean(productToEdit);
 
-  // Khởi tạo trạng thái form từ productToEdit hoặc bản nháp lưu trong sessionStorage
+  // Khởi tạo mã hàng: nếu sửa thì lấy của sản phẩm, nếu có nháp thì lấy nháp, nếu mới thì tự sinh mã
   const [code, setCode] = useState(() => {
     if (productToEdit) return productToEdit.code;
     try {
       const draft = sessionStorage.getItem(DRAFT_KEY);
-      if (draft) return JSON.parse(draft).code ?? '';
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed.code) return parsed.code;
+      }
     } catch { /* ignore */ }
-    return '';
+    return generateNextProductCode(existingProducts);
   });
 
   const [name, setName] = useState(() => {
@@ -69,20 +112,45 @@ function ProductFormDialog({
     return '';
   });
 
-  const [category, setCategory] = useState(() => {
-    if (productToEdit) return productToEdit.category;
+  // Tồn kho: mặc định là '1' khi thêm mới
+  const [stock, setStock] = useState(() => {
+    if (productToEdit) return String(productToEdit.stock);
     try {
       const draft = sessionStorage.getItem(DRAFT_KEY);
-      if (draft) return JSON.parse(draft).category ?? '';
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed.stock !== undefined && parsed.stock !== '') return String(parsed.stock);
+      }
     } catch { /* ignore */ }
-    return '';
+    return '1';
   });
 
+  // Đơn vị tính: nhớ đơn vị vừa dùng
   const [unit, setUnit] = useState(() => {
     if (productToEdit) return productToEdit.unit;
     try {
       const draft = sessionStorage.getItem(DRAFT_KEY);
-      if (draft) return JSON.parse(draft).unit ?? '';
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed.unit) return parsed.unit;
+      }
+      const lastUnit = localStorage.getItem(LAST_UNIT_KEY);
+      if (lastUnit) return lastUnit;
+    } catch { /* ignore */ }
+    return 'chai';
+  });
+
+  // Danh mục: nhớ danh mục vừa dùng
+  const [category, setCategory] = useState(() => {
+    if (productToEdit) return productToEdit.category;
+    try {
+      const draft = sessionStorage.getItem(DRAFT_KEY);
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        if (parsed.category) return parsed.category;
+      }
+      const lastCat = localStorage.getItem(LAST_CATEGORY_KEY);
+      if (lastCat) return lastCat;
     } catch { /* ignore */ }
     return '';
   });
@@ -112,15 +180,6 @@ function ProductFormDialog({
       if (draft) return JSON.parse(draft).salePrice ?? '';
     } catch { /* ignore */ }
     return '';
-  });
-
-  const [stock, setStock] = useState(() => {
-    if (productToEdit) return String(productToEdit.stock);
-    try {
-      const draft = sessionStorage.getItem(DRAFT_KEY);
-      if (draft) return JSON.parse(draft).stock ?? '0';
-    } catch { /* ignore */ }
-    return '0';
   });
 
   const [notes, setNotes] = useState(() => {
@@ -159,7 +218,7 @@ function ProductFormDialog({
   // Trạng thái xử lý và thông báo lỗi
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({});
 
   // Trạng thái xử lý ảnh sản phẩm
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -305,6 +364,32 @@ function ProductFormDialog({
     if (e.key === 'Escape' && !isSubmitting) {
       e.stopPropagation();
       handleClose();
+    }
+  };
+
+  // Sinh mã hàng ngẫu nhiên khác
+  const handleRegenerateCode = () => {
+    const existingCodes = new Set(
+      (existingProducts || []).map((p) => p.code.trim().toUpperCase())
+    );
+    let randNum = Math.floor(Math.random() * 900) + 100;
+    let candidate = `SP${randNum}`;
+    while (existingCodes.has(candidate.toUpperCase())) {
+      randNum = Math.floor(Math.random() * 900) + 100;
+      candidate = `SP${randNum}`;
+    }
+    setCode(candidate);
+    setFieldErrors((prev) => ({ ...prev, code: undefined }));
+  };
+
+  // Chọn nhanh đơn vị tính bằng nút
+  const handleSelectUnit = (selectedUnit: string) => {
+    setUnit(selectedUnit);
+    setFieldErrors((prev) => ({ ...prev, unit: undefined }));
+    try {
+      localStorage.setItem(LAST_UNIT_KEY, selectedUnit);
+    } catch {
+      /* ignore */
     }
   };
 
@@ -494,6 +579,16 @@ function ProductFormDialog({
           URL.revokeObjectURL(previewUrl);
         }
         uploadedStoragePathRef.current = null;
+        try {
+          if (trimmedCategory) {
+            localStorage.setItem(LAST_CATEGORY_KEY, trimmedCategory);
+          }
+          if (trimmedUnit) {
+            localStorage.setItem(LAST_UNIT_KEY, trimmedUnit);
+          }
+        } catch {
+          /* ignore */
+        }
         onSaveSuccess(res.data, true);
         handleClose();
       } else {
@@ -526,12 +621,18 @@ function ProductFormDialog({
           URL.revokeObjectURL(previewUrl);
         }
         uploadedStoragePathRef.current = null;
-        onSaveSuccess(res.data, false);
         try {
           sessionStorage.removeItem(DRAFT_KEY);
+          if (trimmedCategory) {
+            localStorage.setItem(LAST_CATEGORY_KEY, trimmedCategory);
+          }
+          if (trimmedUnit) {
+            localStorage.setItem(LAST_UNIT_KEY, trimmedUnit);
+          }
         } catch {
           /* ignore */
         }
+        onSaveSuccess(res.data, false);
         handleClose();
       }
     } catch {
@@ -630,8 +731,315 @@ function ProductFormDialog({
             </div>
           )}
 
-          {/* Vùng Ảnh sản phẩm */}
+          {/* NHÓM 1: THÔNG TIN CƠ BẢN (ĐẶT Ở PHẦN ĐẦU) */}
           <div className="pf-section">
+            <div className="pf-section-header">
+              <span className="pf-section-badge" aria-hidden="true"></span>
+              <h3 className="pf-section-title">📌 Thông tin cơ bản</h3>
+            </div>
+
+            {/* 1. Tên sản phẩm (Đặt ngay đầu, full-width) */}
+            <div className="pf-field">
+              <label htmlFor="product-name" className="pf-label">
+                Tên sản phẩm <span className="pf-required-star">*</span>
+              </label>
+              <input
+                id="product-name"
+                name="name"
+                type="text"
+                className={`pf-input ${fieldErrors.name ? 'pf-input-error' : ''}`}
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: undefined }));
+                }}
+                placeholder="Ví dụ: Nước mắm Nam Ngư Đệ Nhị 900ml, Gạo ST25..."
+                required
+                disabled={isSubmitting}
+                autoComplete="off"
+                autoFocus={!isEdit}
+              />
+              {fieldErrors.name && <span className="pf-field-error">{fieldErrors.name}</span>}
+            </div>
+
+            {/* 2. Hàng 2 cột: Số lượng tồn & Đơn vị tính */}
+            <div className="pf-grid-2">
+              {/* Số lượng tồn */}
+              <div className="pf-field">
+                <label htmlFor="product-stock" className="pf-label">
+                  Số lượng tồn {isEdit ? '' : 'ban đầu'} <span className="pf-required-star">*</span>
+                </label>
+                <input
+                  id="product-stock"
+                  name="stock"
+                  type="text"
+                  inputMode="decimal"
+                  className={`pf-input ${fieldErrors.stock ? 'pf-input-error' : ''}`}
+                  value={stock}
+                  onChange={(e) => {
+                    setStock(e.target.value);
+                    if (fieldErrors.stock) setFieldErrors((prev) => ({ ...prev, stock: undefined }));
+                  }}
+                  placeholder="Ví dụ: 10 hoặc 2.5"
+                  required
+                  disabled={isSubmitting}
+                  autoComplete="off"
+                />
+                {fieldErrors.stock ? (
+                  <span className="pf-field-error">{fieldErrors.stock}</span>
+                ) : (
+                  <p className="pf-hint-text">
+                    💡 Nhập số lượng trong kho (hỗ trợ số lẻ như <code>2.5</code>).
+                  </p>
+                )}
+              </div>
+
+              {/* Đơn vị tính */}
+              <div className="pf-field">
+                <label htmlFor="product-unit" className="pf-label">
+                  Đơn vị tính <span className="pf-required-star">*</span>
+                  {!isEdit && localStorage.getItem(LAST_UNIT_KEY) && (
+                    <span className="pf-remember-badge">Đã nhớ</span>
+                  )}
+                </label>
+                <input
+                  id="product-unit"
+                  name="unit"
+                  type="text"
+                  list="unit-suggestions"
+                  className={`pf-input ${fieldErrors.unit ? 'pf-input-error' : ''}`}
+                  value={unit}
+                  onChange={(e) => {
+                    setUnit(e.target.value);
+                    if (fieldErrors.unit) setFieldErrors((prev) => ({ ...prev, unit: undefined }));
+                    try {
+                      localStorage.setItem(LAST_UNIT_KEY, e.target.value);
+                    } catch { /* ignore */ }
+                  }}
+                  placeholder="chai, gói, hộp, kg..."
+                  required
+                  disabled={isSubmitting}
+                  autoComplete="off"
+                />
+                <datalist id="unit-suggestions">
+                  {COMMON_UNITS.map((u) => (
+                    <option key={u} value={u} />
+                  ))}
+                </datalist>
+                {fieldErrors.unit && <span className="pf-field-error">{fieldErrors.unit}</span>}
+              </div>
+            </div>
+
+            {/* 3. Dãy nút bấm chọn nhanh đơn vị tính */}
+            <div className="pf-unit-chips-wrapper">
+              <span className="pf-unit-chips-label">
+                <span>Chọn nhanh đơn vị:</span>
+              </span>
+              <div className="pf-unit-chips-container" role="group" aria-label="Chọn nhanh đơn vị tính">
+                {COMMON_UNITS.map((u) => {
+                  const isSelected = unit.trim().toLowerCase() === u.toLowerCase();
+                  return (
+                    <button
+                      key={u}
+                      type="button"
+                      className={`pf-unit-chip-btn ${isSelected ? 'active' : ''}`}
+                      onClick={() => handleSelectUnit(u)}
+                      disabled={isSubmitting}
+                      title={`Chọn đơn vị ${u}`}
+                    >
+                      {isSelected && <span aria-hidden="true">✓ </span>}
+                      <span>{u}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* NHÓM 2: PHÂN LOẠI & MÃ HÀNG HÓA */}
+          <div className="pf-section">
+            <div className="pf-section-header">
+              <span className="pf-section-badge" aria-hidden="true"></span>
+              <h3 className="pf-section-title">🏷️ Phân loại & Mã hàng</h3>
+            </div>
+
+            <div className="pf-grid-2">
+              {/* Danh mục */}
+              <div className="pf-field">
+                <label htmlFor="product-category" className="pf-label">
+                  Danh mục <span className="pf-required-star">*</span>
+                  {!isEdit && localStorage.getItem(LAST_CATEGORY_KEY) && (
+                    <span className="pf-remember-badge">Đã nhớ</span>
+                  )}
+                </label>
+                <input
+                  id="product-category"
+                  name="category"
+                  type="text"
+                  list="category-suggestions"
+                  className={`pf-input ${fieldErrors.category ? 'pf-input-error' : ''}`}
+                  value={category}
+                  onChange={(e) => {
+                    setCategory(e.target.value);
+                    if (fieldErrors.category) setFieldErrors((prev) => ({ ...prev, category: undefined }));
+                    try {
+                      localStorage.setItem(LAST_CATEGORY_KEY, e.target.value);
+                    } catch { /* ignore */ }
+                  }}
+                  placeholder="Chọn hoặc gõ danh mục mới"
+                  required
+                  disabled={isSubmitting}
+                  autoComplete="off"
+                />
+                <datalist id="category-suggestions">
+                  {existingCategories.map((cat) => (
+                    <option key={cat} value={cat} />
+                  ))}
+                </datalist>
+                {fieldErrors.category && (
+                  <span className="pf-field-error">{fieldErrors.category}</span>
+                )}
+              </div>
+
+              {/* Mã hàng (SKU) với chức năng tự sinh mã */}
+              <div className="pf-field">
+                <label htmlFor="product-code" className="pf-label">
+                  Mã hàng (SKU) <span className="pf-required-star">*</span>
+                </label>
+                <div className="pf-code-input-wrapper">
+                  <input
+                    id="product-code"
+                    name="code"
+                    type="text"
+                    inputMode="text"
+                    className={`pf-input ${fieldErrors.code ? 'pf-input-error' : ''}`}
+                    value={code}
+                    onChange={(e) => {
+                      setCode(e.target.value);
+                      if (fieldErrors.code) setFieldErrors((prev) => ({ ...prev, code: undefined }));
+                    }}
+                    placeholder="Ví dụ: SP001"
+                    required
+                    disabled={isSubmitting}
+                    autoComplete="off"
+                  />
+                  {!isEdit && (
+                    <button
+                      type="button"
+                      className="pf-code-refresh-btn"
+                      onClick={handleRegenerateCode}
+                      disabled={isSubmitting}
+                      title="Sinh mã hàng khác"
+                      aria-label="Tự sinh mã hàng khác"
+                    >
+                      🔄
+                    </button>
+                  )}
+                </div>
+                {fieldErrors.code ? (
+                  <span className="pf-field-error">{fieldErrors.code}</span>
+                ) : (
+                  <p className="pf-hint-text">
+                    ✨ Tự sinh mã hàng (bấm 🔄 để đổi mã hoặc chỉnh sửa tùy ý).
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Mã vạch */}
+            <div className="pf-field">
+              <label htmlFor="product-barcode" className="pf-label">
+                Mã vạch <span className="pf-optional-tag">(không bắt buộc)</span>
+              </label>
+              <input
+                id="product-barcode"
+                name="barcode"
+                type="text"
+                inputMode="text"
+                className={`pf-input ${fieldErrors.barcode ? 'pf-input-error' : ''}`}
+                value={barcode}
+                onChange={(e) => {
+                  setBarcode(e.target.value);
+                  if (fieldErrors.barcode) setFieldErrors((prev) => ({ ...prev, barcode: undefined }));
+                }}
+                placeholder="Ví dụ: 8935001201015"
+                disabled={isSubmitting}
+                autoComplete="off"
+              />
+              {fieldErrors.barcode && <span className="pf-field-error">{fieldErrors.barcode}</span>}
+            </div>
+          </div>
+
+          {/* NHÓM 3: GIÁ VÀ CHI PHÍ */}
+          <div className="pf-section">
+            <div className="pf-section-header">
+              <span className="pf-section-badge" aria-hidden="true"></span>
+              <h3 className="pf-section-title">💰 Giá sản phẩm</h3>
+            </div>
+
+            <div className="pf-grid-2">
+              {/* Giá nhập */}
+              <div className="pf-field">
+                <label htmlFor="product-purchase-price" className="pf-label">
+                  Giá nhập (₫) <span className="pf-required-star">*</span>
+                </label>
+                <input
+                  id="product-purchase-price"
+                  name="purchasePrice"
+                  type="text"
+                  inputMode="decimal"
+                  className={`pf-input ${fieldErrors.purchasePrice ? 'pf-input-error' : ''}`}
+                  value={purchasePrice}
+                  onChange={(e) => {
+                    setPurchasePrice(e.target.value);
+                    if (fieldErrors.purchasePrice) setFieldErrors((prev) => ({ ...prev, purchasePrice: undefined }));
+                  }}
+                  placeholder="Ví dụ: 25000"
+                  required
+                  disabled={isSubmitting}
+                  autoComplete="off"
+                />
+                {fieldErrors.purchasePrice && (
+                  <span className="pf-field-error">{fieldErrors.purchasePrice}</span>
+                )}
+              </div>
+
+              {/* Giá bán */}
+              <div className="pf-field">
+                <label htmlFor="product-sale-price" className="pf-label">
+                  Giá bán (₫) <span className="pf-required-star">*</span>
+                </label>
+                <input
+                  id="product-sale-price"
+                  name="salePrice"
+                  type="text"
+                  inputMode="decimal"
+                  className={`pf-input ${fieldErrors.salePrice ? 'pf-input-error' : ''}`}
+                  value={salePrice}
+                  onChange={(e) => {
+                    setSalePrice(e.target.value);
+                    if (fieldErrors.salePrice) setFieldErrors((prev) => ({ ...prev, salePrice: undefined }));
+                  }}
+                  placeholder="Ví dụ: 30000"
+                  required
+                  disabled={isSubmitting}
+                  autoComplete="off"
+                />
+                {fieldErrors.salePrice && (
+                  <span className="pf-field-error">{fieldErrors.salePrice}</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* NHÓM 4: ẢNH & GHI CHÚ THÊM (TÙY CHỌN) */}
+          <div className="pf-section">
+            <div className="pf-section-header">
+              <span className="pf-section-badge" aria-hidden="true"></span>
+              <h3 className="pf-section-title">📷 Ảnh & Ghi chú (Tùy chọn)</h3>
+            </div>
+
+            {/* Vùng Ảnh sản phẩm */}
             <div className="pf-field">
               <label className="pf-label">
                 Ảnh sản phẩm <span className="pf-optional-tag">(không bắt buộc)</span>
@@ -726,225 +1134,8 @@ function ProductFormDialog({
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Nhóm 1: Thông tin sản phẩm */}
-          <div className="pf-section">
-            <div className="pf-section-header">
-              <span className="pf-section-badge" aria-hidden="true"></span>
-              <h3 className="pf-section-title">Thông tin sản phẩm</h3>
-            </div>
-
-            {/* Tên sản phẩm (Full-width) */}
-            <div className="pf-field">
-              <label htmlFor="product-name" className="pf-label">
-                Tên sản phẩm <span className="pf-required-star">*</span>
-              </label>
-              <input
-                id="product-name"
-                name="name"
-                type="text"
-                className={`pf-input ${fieldErrors.name ? 'pf-input-error' : ''}`}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Ví dụ: Gạo ST25 Thượng Hạng Ông Cua Túi 5kg"
-                required
-                disabled={isSubmitting}
-                autoComplete="off"
-              />
-              {fieldErrors.name && <span className="pf-field-error">{fieldErrors.name}</span>}
-            </div>
-
-            {/* Hàng 2 cột: Mã hàng & Mã vạch */}
-            <div className="pf-grid-2">
-              {/* Mã hàng */}
-              <div className="pf-field">
-                <label htmlFor="product-code" className="pf-label">
-                  Mã hàng <span className="pf-required-star">*</span>
-                </label>
-                <input
-                  id="product-code"
-                  name="code"
-                  type="text"
-                  inputMode="text"
-                  className={`pf-input ${fieldErrors.code ? 'pf-input-error' : ''}`}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  placeholder="Ví dụ: 00101"
-                  required
-                  disabled={isSubmitting}
-                  autoComplete="off"
-                />
-                {fieldErrors.code && <span className="pf-field-error">{fieldErrors.code}</span>}
-              </div>
-
-              {/* Mã vạch */}
-              <div className="pf-field">
-                <label htmlFor="product-barcode" className="pf-label">
-                  Mã vạch <span className="pf-optional-tag">(không bắt buộc)</span>
-                </label>
-                <input
-                  id="product-barcode"
-                  name="barcode"
-                  type="text"
-                  inputMode="text"
-                  className={`pf-input ${fieldErrors.barcode ? 'pf-input-error' : ''}`}
-                  value={barcode}
-                  onChange={(e) => setBarcode(e.target.value)}
-                  placeholder="Ví dụ: 8935001201015"
-                  disabled={isSubmitting}
-                  autoComplete="off"
-                />
-                {fieldErrors.barcode && <span className="pf-field-error">{fieldErrors.barcode}</span>}
-              </div>
-            </div>
-
-            {/* Hàng 2 cột: Danh mục & Đơn vị tính */}
-            <div className="pf-grid-2">
-              {/* Danh mục */}
-              <div className="pf-field">
-                <label htmlFor="product-category" className="pf-label">
-                  Danh mục <span className="pf-required-star">*</span>
-                </label>
-                <input
-                  id="product-category"
-                  name="category"
-                  type="text"
-                  list="category-suggestions"
-                  className={`pf-input ${fieldErrors.category ? 'pf-input-error' : ''}`}
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  placeholder="Chọn hoặc gõ danh mục mới"
-                  required
-                  disabled={isSubmitting}
-                  autoComplete="off"
-                />
-                <datalist id="category-suggestions">
-                  {existingCategories.map((cat) => (
-                    <option key={cat} value={cat} />
-                  ))}
-                </datalist>
-                {fieldErrors.category && (
-                  <span className="pf-field-error">{fieldErrors.category}</span>
-                )}
-              </div>
-
-              {/* Đơn vị tính */}
-              <div className="pf-field">
-                <label htmlFor="product-unit" className="pf-label">
-                  Đơn vị tính <span className="pf-required-star">*</span>
-                </label>
-                <input
-                  id="product-unit"
-                  name="unit"
-                  type="text"
-                  list="unit-suggestions"
-                  className={`pf-input ${fieldErrors.unit ? 'pf-input-error' : ''}`}
-                  value={unit}
-                  onChange={(e) => setUnit(e.target.value)}
-                  placeholder="Ví dụ: gói, chai, kg, túi..."
-                  required
-                  disabled={isSubmitting}
-                  autoComplete="off"
-                />
-                <datalist id="unit-suggestions">
-                  {COMMON_UNITS.map((u) => (
-                    <option key={u} value={u} />
-                  ))}
-                </datalist>
-                {fieldErrors.unit && <span className="pf-field-error">{fieldErrors.unit}</span>}
-              </div>
-            </div>
-          </div>
-
-          {/* Nhóm 2: Giá và tồn kho */}
-          <div className="pf-section">
-            <div className="pf-section-header">
-              <span className="pf-section-badge" aria-hidden="true"></span>
-              <h3 className="pf-section-title">Giá và tồn kho</h3>
-            </div>
-
-            {/* Hàng 2 cột: Giá nhập & Giá bán */}
-            <div className="pf-grid-2">
-              {/* Giá nhập */}
-              <div className="pf-field">
-                <label htmlFor="product-purchase-price" className="pf-label">
-                  Giá nhập (₫) <span className="pf-required-star">*</span>
-                </label>
-                <input
-                  id="product-purchase-price"
-                  name="purchasePrice"
-                  type="text"
-                  inputMode="decimal"
-                  className={`pf-input ${fieldErrors.purchasePrice ? 'pf-input-error' : ''}`}
-                  value={purchasePrice}
-                  onChange={(e) => setPurchasePrice(e.target.value)}
-                  placeholder="Ví dụ: 25000"
-                  required
-                  disabled={isSubmitting}
-                  autoComplete="off"
-                />
-                {fieldErrors.purchasePrice && (
-                  <span className="pf-field-error">{fieldErrors.purchasePrice}</span>
-                )}
-              </div>
-
-              {/* Giá bán */}
-              <div className="pf-field">
-                <label htmlFor="product-sale-price" className="pf-label">
-                  Giá bán (₫) <span className="pf-required-star">*</span>
-                </label>
-                <input
-                  id="product-sale-price"
-                  name="salePrice"
-                  type="text"
-                  inputMode="decimal"
-                  className={`pf-input ${fieldErrors.salePrice ? 'pf-input-error' : ''}`}
-                  value={salePrice}
-                  onChange={(e) => setSalePrice(e.target.value)}
-                  placeholder="Ví dụ: 30000"
-                  required
-                  disabled={isSubmitting}
-                  autoComplete="off"
-                />
-                {fieldErrors.salePrice && (
-                  <span className="pf-field-error">{fieldErrors.salePrice}</span>
-                )}
-              </div>
-            </div>
-
-            {/* Số lượng tồn kho */}
-            <div className="pf-field">
-              <label htmlFor="product-stock" className="pf-label">
-                Số lượng tồn <span className="pf-required-star">*</span>
-              </label>
-              <input
-                id="product-stock"
-                name="stock"
-                type="text"
-                inputMode="decimal"
-                className={`pf-input ${fieldErrors.stock ? 'pf-input-error' : ''}`}
-                value={stock}
-                onChange={(e) => setStock(e.target.value)}
-                placeholder="Ví dụ: 10 hoặc 2.5"
-                required
-                disabled={isSubmitting}
-                autoComplete="off"
-              />
-              {fieldErrors.stock && <span className="pf-field-error">{fieldErrors.stock}</span>}
-              <p className="pf-hint-text">
-                💡 Dùng dấu chấm (.) cho phần thập phân (ví dụ: <code>2.5</code> kg hoặc <code>12500.50</code> ₫).
-              </p>
-            </div>
-          </div>
-
-          {/* Nhóm 3: Ghi chú thêm */}
-          <div className="pf-section">
-            <div className="pf-section-header">
-              <span className="pf-section-badge" aria-hidden="true"></span>
-              <h3 className="pf-section-title">Ghi chú thêm</h3>
-            </div>
-
+            {/* Ghi chú thêm */}
             <div className="pf-field">
               <label htmlFor="product-notes" className="pf-label">
                 Ghi chú lưu ý <span className="pf-optional-tag">(không bắt buộc)</span>

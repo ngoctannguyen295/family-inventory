@@ -3990,3 +3990,226 @@
   justify-content: flex-end;
 }
 
+/* ==========================================================================
+   USER PROFILE & ACCOUNT SETTINGS MODAL STYLES
+   ========================================================================== */
+
+/* Profile button in Header */
+.user-profile-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 6px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: inherit;
+}
+
+.user-profile-btn:hover {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-primary-light, #93c5fd);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.user-profile-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.user-avatar-circle {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.profile-edit-icon {
+  font-size: 13px;
+  opacity: 0.65;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.user-profile-btn:hover .profile-edit-icon {
+  opacity: 1;
+  transform: rotate(45deg);
+}
+
+/* Modal Content */
+.user-profile-modal-content {
+  max-width: 520px;
+  width: 92%;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--radius-lg, 12px);
+  background-color: var(--color-surface, #ffffff);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.profile-modal-header-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-header-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+  flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(2, 132, 199, 0.25);
+}
+
+.profile-modal-subtitle {
+  font-size: 13px;
+  color: var(--color-text-muted, #64748b);
+  margin-top: 2px;
+}
+
+/* Tabs */
+.profile-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+  background-color: #f8fafc;
+  padding: 0 16px;
+}
+
+.profile-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #64748b);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.profile-tab-btn:hover {
+  color: var(--color-text-primary, #0f172a);
+}
+
+.profile-tab-btn.active {
+  color: var(--color-primary, #0284c7);
+  border-bottom-color: var(--color-primary, #0284c7);
+  background-color: transparent;
+}
+
+/* Modal Body & Form */
+.profile-modal-body {
+  padding: 20px 24px;
+  max-height: calc(85vh - 140px);
+  overflow-y: auto;
+}
+
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.profile-alert-success {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius-md, 8px);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #15803d;
+  line-height: 1.4;
+}
+
+.input-with-badge {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.readonly-input {
+  background-color: #f8fafc !important;
+  color: #64748b !important;
+  cursor: not-allowed;
+  padding-right: 95px !important;
+}
+
+.email-verified-tag {
+  position: absolute;
+  right: 10px;
+  padding: 2px 8px;
+  background-color: #dcfce7;
+  color: #166534;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid #86efac;
+}
+
+.form-helper-text {
+  font-size: 12px;
+  color: var(--color-text-muted, #64748b);
+  line-height: 1.35;
+  margin-top: 4px;
+  display: block;
+}
+
+.role-info-box {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-md, 8px);
+  padding: 12px 14px;
+}
+
+.role-info-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.role-info-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary, #0f172a);
+}
+
+.role-info-desc {
+  font-size: 12px;
+  color: var(--color-text-muted, #64748b);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.profile-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 8px;
+  margin-top: 8px;
+  border-top: 1px solid var(--color-border, #e2e8f0);
+}
+
+
