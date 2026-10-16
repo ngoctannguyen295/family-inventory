@@ -824,6 +824,50 @@ export function App() {
       />
 
       <div className="app-main-content-column">
+        {/* Thanh App Bar cố định trên di động (chỉ hiển thị khi màn hình <= 900px) */}
+        <div className="mobile-app-bar">
+          <button
+            type="button"
+            className="mobile-app-bar-menu-btn"
+            onClick={() => setIsMobileMenuOpen(true)}
+            aria-label="Mở thanh menu bên trái"
+            title="Mở menu quản lý kho"
+          >
+            <span className="mobile-bar-menu-icon" aria-hidden="true">☰</span>
+            <span className="mobile-bar-menu-label">Menu</span>
+          </button>
+
+          <div className="mobile-app-bar-center">
+            <span className="mobile-bar-logo" aria-hidden="true">📦</span>
+            <span className="mobile-bar-title">Kho Gia Đình</span>
+          </div>
+
+          <div className="mobile-app-bar-right">
+            {canEdit && (
+              <button
+                type="button"
+                className="mobile-bar-action-btn"
+                onClick={() => handleOpenStockIn(null)}
+                title="Nhập kho nhanh"
+                aria-label="Nhập kho nhanh"
+              >
+                📥
+              </button>
+            )}
+            {member && (
+              <button
+                type="button"
+                className="mobile-bar-avatar-btn"
+                onClick={handleOpenProfile}
+                title={`Hồ sơ của ${member.display_name}`}
+                aria-label="Xem hồ sơ cá nhân"
+              >
+                {member.display_name ? member.display_name.charAt(0).toUpperCase() : '👤'}
+              </button>
+            )}
+          </div>
+        </div>
+
         {currentView === 'profile' && member ? (
           <UserProfilePage
             member={member}

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { FamilyMember } from '../types/database';
 import './Sidebar.css';
 
@@ -38,6 +39,26 @@ export function Sidebar({
   onSignOut,
   isSigningOut,
 }: SidebarProps) {
+  // Khóa cuộn trang khi mở menu di động & hỗ trợ phím Escape
+  useEffect(() => {
+    if (!isOpenMobile) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onCloseMobile();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpenMobile, onCloseMobile]);
+
   const handleNavClick = (callback: () => void) => {
     callback();
     onCloseMobile();
