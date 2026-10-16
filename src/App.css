@@ -866,17 +866,24 @@
   color: #be123c;
 }
 
-/* 4. Tóm tắt kết quả */
+/* 4. Tóm tắt kết quả & Menu sắp xếp */
 .results-summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   padding-top: 10px;
   border-top: 1px dashed var(--color-border);
   font-size: 13px;
   color: var(--color-text-secondary);
+}
+
+.results-summary-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .results-text strong {
@@ -887,6 +894,90 @@
   font-size: 12px;
   color: var(--color-primary);
   font-weight: 600;
+}
+
+/* Khung điều khiển Sắp xếp (Sort dropdown) */
+.sort-control-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.sort-control-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.sort-control-label .sort-icon {
+  font-size: 14px;
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+.sort-select-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.sort-dropdown-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding: 5.5px 28px 5.5px 10px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.sort-dropdown-select:hover {
+  border-color: #93c5fd;
+  background-color: #f8fafc;
+}
+
+.sort-dropdown-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2.5px rgba(2, 132, 199, 0.16);
+}
+
+.sort-dropdown-arrow {
+  position: absolute;
+  right: 9px;
+  pointer-events: none;
+  font-size: 10px;
+  color: #64748b;
+  font-weight: 700;
+}
+
+@media (max-width: 600px) {
+  .results-summary {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .sort-control-label .sort-label-text {
+    display: none; /* Thu gọn chữ "Sắp xếp:" trên điện thoại hẹp để vừa vặn */
+  }
+
+  .sort-dropdown-select {
+    font-size: 12px;
+    padding: 5px 24px 5px 8px;
+    max-width: 175px;
+  }
 }
 
 /* Product Grid - 2 cột trên di động (>= 360px), quen thuộc như Shopee */

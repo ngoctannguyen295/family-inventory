@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
-import type { Product } from './types/product';
+import type { Product, SortOption } from './types/product';
 import type { FamilyMember } from './types/database';
 import { formatCurrency, removeVietnameseTones } from './utils/formatters';
 import { Header } from './components/Header';
@@ -63,10 +63,28 @@ export function App() {
   const [deletedError, setDeletedError] = useState<string | null>(null);
   const [isDeletedModalOpen, setIsDeletedModalOpen] = useState(false);
 
-  // 4. Quản lý bộ lọc & tìm kiếm
+  // 4. Quản lý bộ lọc, tìm kiếm & sắp xếp
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [sortBy, setSortBy] = useState<SortOption>(() => {
+    try {
+      const saved = localStorage.getItem('family_inventory_sort_by');
+      if (saved) return saved as SortOption;
+    } catch {
+      // Bỏ qua lỗi truy cập localStorage
+    }
+    return 'newest';
+  });
   const [retryCounter, setRetryCounter] = useState(0);
+
+  const handleSortChange = useCallback((newSort: SortOption) => {
+    setSortBy(newSort);
+    try {
+      localStorage.setItem('family_inventory_sort_by', newSort);
+    } catch {
+      // Bỏ qua lỗi ghi localStorage
+    }
+  }, []);
 
   // 5. Quản lý modal Chi tiết sản phẩm
   const [selectedDetailProduct, setSelectedDetailProduct] = useState<Product | null>(null);
@@ -630,12 +648,12 @@ export function App() {
     return Array.from(new Set(products.map((item) => item.category)));
   }, [products]);
 
-  // Lọc sản phẩm theo danh mục và từ khóa tìm kiếm tiếng Việt không dấu
+  // Lọc và sắp xếp sản phẩm theo danh mục, từ khóa và tiêu chí sort
   const filteredProducts = useMemo(() => {
     const rawSearch = searchTerm.trim();
     const normalizedQuery = removeVietnameseTones(rawSearch);
 
-    return products.filter((product) => {
+    const filtered = products.filter((product) => {
       // 1. Kiểm tra danh mục
       if (selectedCategory !== 'ALL' && product.category !== selectedCategory) {
         return false;
@@ -664,7 +682,49 @@ export function App() {
 
       return false;
     });
-  }, [products, searchTerm, selectedCategory]);
+
+    // 3. Sắp xếp danh sách đã lọc theo tiêu chí người dùng chọn
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      switch (sortBy) {
+        case 'newest': {
+          const timeA = new Date(a.createdAt || 0).getTime();
+          const timeB = new Date(b.createdAt || 0).getTime();
+          return timeB - timeA;
+        }
+        case 'updated': {
+          const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+          const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+          return timeB - timeA;
+        }
+        case 'name_asc': {
+          return a.name.localeCompare(b.name, 'vi', { sensitivity: 'base' });
+        }
+        case 'name_desc': {
+          return b.name.localeCompare(a.name, 'vi', { sensitivity: 'base' });
+        }
+        case 'stock_asc': {
+          return a.stock - b.stock;
+        }
+        case 'stock_desc': {
+          return b.stock - a.stock;
+        }
+        case 'price_asc': {
+          return a.salePrice - b.salePrice;
+        }
+        case 'price_desc': {
+          return b.salePrice - a.salePrice;
+        }
+        case 'code_asc': {
+          return a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' });
+        }
+        default:
+          return 0;
+      }
+    });
+
+    return sorted;
+  }, [products, searchTerm, selectedCategory, sortBy]);
 
   const hasFiltersApplied = searchTerm.trim() !== '' || selectedCategory !== 'ALL';
 
@@ -976,6 +1036,8 @@ export function App() {
                   categories={categories}
                   displayedCount={filteredProducts.length}
                   totalCount={products.length}
+                  sortBy={sortBy}
+                  onSortChange={handleSortChange}
                   onOpenBarcodeScanner={handleOpenBarcodeScanner}
                   onOpenImageSearch={handleOpenImageSearch}
                   canEdit={canEdit}

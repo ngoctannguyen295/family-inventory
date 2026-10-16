@@ -40,5 +40,7 @@ export function mapProductRow(row: ProductRow): Product {
     stock: Number(row.stock),
     notes: row.notes,
     deletedAt: row.deleted_at || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }

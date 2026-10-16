@@ -1,4 +1,5 @@
 import type { ChangeEvent } from 'react';
+import type { SortOption } from '../types/product';
 
 interface SearchAndFilterProps {
   searchTerm: string;
@@ -8,6 +9,8 @@ interface SearchAndFilterProps {
   categories: string[];
   displayedCount: number;
   totalCount: number;
+  sortBy: SortOption;
+  onSortChange: (sort: SortOption) => void;
   onOpenBarcodeScanner?: (triggerEl: HTMLElement) => void;
   onOpenImageSearch?: (triggerEl: HTMLElement) => void;
   canEdit?: boolean;
@@ -25,6 +28,8 @@ export function SearchAndFilter({
   categories,
   displayedCount,
   totalCount,
+  sortBy,
+  onSortChange,
   onOpenBarcodeScanner,
   onOpenImageSearch,
   canEdit,
@@ -198,16 +203,45 @@ export function SearchAndFilter({
         </div>
       </div>
 
-      {/* 4. Dòng trạng thái tóm tắt kết quả */}
+      {/* 4. Dòng trạng thái tóm tắt kết quả & Dropdown chọn thứ tự sắp xếp */}
       <div className="results-summary" role="status" aria-live="polite">
-        <span className="results-text">
-          Hiển thị <strong>{displayedCount}</strong> / <strong>{totalCount}</strong> sản phẩm
-        </span>
-        {(searchTerm || selectedCategory !== 'ALL') && (
-          <span className="active-filter-indicator">
-            (Đang áp dụng bộ lọc)
+        <div className="results-summary-left">
+          <span className="results-text">
+            Hiển thị <strong>{displayedCount}</strong> / <strong>{totalCount}</strong> sản phẩm
           </span>
-        )}
+          {(searchTerm || selectedCategory !== 'ALL') && (
+            <span className="active-filter-indicator">
+              (Đang lọc)
+            </span>
+          )}
+        </div>
+
+        <div className="sort-control-container">
+          <label htmlFor="product-sort-select" className="sort-control-label">
+            <span className="sort-icon" aria-hidden="true">⇅</span>
+            <span className="sort-label-text">Sắp xếp:</span>
+          </label>
+          <div className="sort-select-wrapper">
+            <select
+              id="product-sort-select"
+              className="sort-dropdown-select"
+              value={sortBy}
+              onChange={(e) => onSortChange(e.target.value as SortOption)}
+              aria-label="Chọn thứ tự sắp xếp sản phẩm"
+            >
+              <option value="newest">🕒 Mới nhất</option>
+              <option value="updated">⚡ Vừa cập nhật / Nhập kho</option>
+              <option value="name_asc">🔤 Tên: A ➔ Z</option>
+              <option value="name_desc">🔤 Tên: Z ➔ A</option>
+              <option value="stock_asc">📉 Tồn kho: Ít ➔ Nhiều (Sắp hết)</option>
+              <option value="stock_desc">📈 Tồn kho: Nhiều ➔ Ít</option>
+              <option value="price_asc">💵 Giá bán: Thấp ➔ Cao</option>
+              <option value="price_desc">💵 Giá bán: Cao ➔ Thấp</option>
+              <option value="code_asc">🔢 Mã hàng: A ➔ Z</option>
+            </select>
+            <span className="sort-dropdown-arrow" aria-hidden="true">▾</span>
+          </div>
+        </div>
       </div>
     </section>
   );
