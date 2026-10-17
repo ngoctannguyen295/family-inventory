@@ -333,286 +333,324 @@ export async function analyzeProductImage(
 ): Promise<GeminiAnalysisResult> {
   const startTime = performance.now();
   const apiKey = Deno.env.get('GEMINI_API_KEY');
-  const model = Deno.env.get('GEMINI_MODEL') || 'gemini-3.6-flash';
+  const primaryModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3.6-flash';
+  // Các model dự phòng theo thứ tự ưu tiên khi model chính bị quá tải (503 / 429)
+  const candidateModels = [
+    primaryModel,
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+  ].filter((m, idx, arr) => arr.indexOf(m) === idx);
 
-  if (!apiKey) {
-    return {
-      success: false,
-      status: 500,
-      error: 'missing_gemini_api_key',
-      message: 'Máy chủ chưa cấu hình GEMINI_API_KEY trong Supabase Secrets.',
-    };
-  }
+  let lastErrorResult: GeminiAnalysisResult | null = null;
 
-  // Chuyển API key từ query string sang header x-goog-api-key để bảo mật tuyệt đối
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  for (let mIdx = 0; mIdx < candidateModels.length; mIdx++) {
+    const model = candidateModels[mIdx];
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
-  const envBudget = Deno.env.get('GEMINI_THINKING_BUDGET');
-  const envLevel = Deno.env.get('GEMINI_THINKING_LEVEL');
-  const thinkingConfig = buildGeminiThinkingConfig(model, envBudget, envLevel);
+    const envBudget = Deno.env.get('GEMINI_THINKING_BUDGET');
+    const envLevel = Deno.env.get('GEMINI_THINKING_LEVEL');
+    const thinkingConfig = buildGeminiThinkingConfig(model, envBudget, envLevel);
 
-  const requestBody = {
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          { text: SYSTEM_INSTRUCTION },
-          {
-            inlineData: {
-              mimeType,
-              data: base64Image,
+    const requestBody = {
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: SYSTEM_INSTRUCTION },
+            {
+              inlineData: {
+                mimeType,
+                data: base64Image,
+              },
             },
-          },
-        ],
-      },
-    ],
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: 'OBJECT',
-        properties: {
-          product_name: { type: 'STRING', nullable: true },
-          brand: { type: 'STRING', nullable: true },
-          variant: { type: 'STRING', nullable: true },
-          quantity_value: { type: 'NUMBER', nullable: true },
-          quantity_unit: { type: 'STRING', nullable: true },
-          visible_text: {
-            type: 'ARRAY',
-            items: { type: 'STRING' },
-          },
-          readable: { type: 'BOOLEAN' },
-          object_type: { type: 'STRING', nullable: true },
-          visual_features: { type: 'STRING', nullable: true },
-          visual_signature: { type: 'STRING', nullable: true },
-          category_hint: { type: 'STRING', nullable: true },
+          ],
         },
-        required: [
-          'product_name',
-          'brand',
-          'variant',
-          'quantity_value',
-          'quantity_unit',
-          'visible_text',
-          'readable',
-          'object_type',
-          'visual_features',
-          'visual_signature',
-          'category_hint',
-        ],
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'OBJECT',
+          properties: {
+            product_name: { type: 'STRING', nullable: true },
+            brand: { type: 'STRING', nullable: true },
+            variant: { type: 'STRING', nullable: true },
+            quantity_value: { type: 'NUMBER', nullable: true },
+            quantity_unit: { type: 'STRING', nullable: true },
+            visible_text: {
+              type: 'ARRAY',
+              items: { type: 'STRING' },
+            },
+            readable: { type: 'BOOLEAN' },
+            object_type: { type: 'STRING', nullable: true },
+            visual_features: { type: 'STRING', nullable: true },
+            visual_signature: { type: 'STRING', nullable: true },
+            category_hint: { type: 'STRING', nullable: true },
+          },
+          required: [
+            'product_name',
+            'brand',
+            'variant',
+            'quantity_value',
+            'quantity_unit',
+            'visible_text',
+            'readable',
+            'object_type',
+            'visual_features',
+            'visual_signature',
+            'category_hint',
+          ],
+        },
+        temperature: 0.1,
+        maxOutputTokens: 2048,
+        ...(thinkingConfig ? { thinkingConfig } : {}),
       },
-      temperature: 0.1,
-      maxOutputTokens: 2048,
-      ...(thinkingConfig ? { thinkingConfig } : {}),
-    },
-  };
+    };
 
-  // Timeout 35 giây qua AbortController bao bọc cả fetch lẫn đọc stream response body
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort();
-  }, 35000);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, 25000);
 
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify(requestBody),
-      signal: controller.signal,
-    });
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
 
-    if (!response.ok) {
-      let upstreamErrorStatus = 'UNKNOWN';
-      let upstreamErrorMessage = '';
+      clearTimeout(timeoutId);
 
-      try {
-        const errorBodyText = await readLimitedResponseText(response, MAX_RESPONSE_BYTES);
-        if (errorBodyText && errorBodyText.trim().length > 0) {
-          try {
-            const errorJson = JSON.parse(errorBodyText);
-            if (errorJson && typeof errorJson === 'object' && errorJson !== null) {
-              const errObj = (errorJson as Record<string, unknown>).error;
-              if (errObj && typeof errObj === 'object' && errObj !== null) {
-                const castErr = errObj as Record<string, unknown>;
-                if (typeof castErr.status === 'string' && castErr.status.trim().length > 0) {
-                  upstreamErrorStatus = castErr.status.trim();
+      if (!response.ok) {
+        let upstreamErrorStatus = 'UNKNOWN';
+        let upstreamErrorMessage = '';
+
+        try {
+          const errorBodyText = await readLimitedResponseText(response, MAX_RESPONSE_BYTES);
+          if (errorBodyText && errorBodyText.trim().length > 0) {
+            try {
+              const errorJson = JSON.parse(errorBodyText);
+              if (errorJson && typeof errorJson === 'object' && errorJson !== null) {
+                const errObj = (errorJson as Record<string, unknown>).error;
+                if (errObj && typeof errObj === 'object' && errObj !== null) {
+                  const castErr = errObj as Record<string, unknown>;
+                  if (typeof castErr.status === 'string' && castErr.status.trim().length > 0) {
+                    upstreamErrorStatus = castErr.status.trim();
+                  }
+                  if (typeof castErr.message === 'string' && castErr.message.trim().length > 0) {
+                    upstreamErrorMessage = castErr.message.trim();
+                  }
+                } else if (typeof (errorJson as Record<string, unknown>).message === 'string') {
+                  upstreamErrorMessage = ((errorJson as Record<string, unknown>).message as string).trim();
                 }
-                if (typeof castErr.message === 'string' && castErr.message.trim().length > 0) {
-                  upstreamErrorMessage = castErr.message.trim();
-                }
-              } else if (typeof (errorJson as Record<string, unknown>).message === 'string') {
-                upstreamErrorMessage = ((errorJson as Record<string, unknown>).message as string).trim();
               }
+            } catch {
+              upstreamErrorMessage = errorBodyText.trim();
             }
-          } catch {
-            // Body không phải JSON, sử dụng text thuần
-            upstreamErrorMessage = errorBodyText.trim();
           }
+        } catch (readErr) {
+          upstreamErrorMessage = `Failed to read error body: ${readErr instanceof Error ? readErr.message : 'Unknown'}`;
         }
-      } catch (readErr) {
-        upstreamErrorMessage = `Failed to read error body: ${readErr instanceof Error ? readErr.message : 'Unknown'}`;
+
+        if (!upstreamErrorMessage) {
+          upstreamErrorMessage = response.statusText || 'No error message provided';
+        }
+
+        const sanitizedMessage = sanitizeErrorMessage(upstreamErrorMessage, apiKey);
+
+        console.error(
+          `[GEMINI_UPSTREAM_ERROR] HTTP status: ${response.status} | model: ${model} | error.status: ${upstreamErrorStatus} | error.message: ${sanitizedMessage}`
+        );
+
+        // Kiểm tra xem có phải lỗi quá tải tạm thời hay không (503 Service Unavailable, 429 hoặc High Demand)
+        const isTemporaryOverload =
+          response.status === 503 ||
+          response.status === 429 ||
+          sanitizedMessage.toLowerCase().includes('high demand') ||
+          sanitizedMessage.toLowerCase().includes('overloaded') ||
+          sanitizedMessage.toLowerCase().includes('resource has been exhausted');
+
+        if (isTemporaryOverload && mIdx < candidateModels.length - 1) {
+          console.warn(
+            `[GEMINI_OVERLOAD_FALLBACK] Model ${model} quá tải, tự động chuyển sang mô hình dự phòng ${candidateModels[mIdx + 1]}...`
+          );
+          await new Promise((r) => setTimeout(r, 600));
+          continue; // Chuyển sang model dự phòng tiếp theo
+        }
+
+        const friendlyMsg = isTemporaryOverload
+          ? 'Dịch vụ AI của Google đang bị quá tải tạm thời do lượng truy cập tăng đột biến. Vui lòng bấm "Thử lại" sau vài giây.'
+          : `Lỗi từ dịch vụ AI (${model}): ${sanitizedMessage || 'Không thể nhận phản hồi hợp lệ.'}`;
+
+        lastErrorResult = {
+          success: false,
+          status: isTemporaryOverload ? 503 : 502,
+          error: isTemporaryOverload ? 'gemini_high_demand' : 'gemini_api_error',
+          message: friendlyMsg,
+        };
+        continue;
       }
 
-      if (!upstreamErrorMessage) {
-        upstreamErrorMessage = response.statusText || 'No error message provided';
+      // Đọc text phản hồi kèm giới hạn dung lượng để chống tràn bộ nhớ
+      const rawText = await readLimitedResponseText(response, MAX_RESPONSE_BYTES);
+
+      let responseData: Record<string, unknown>;
+      try {
+        responseData = JSON.parse(rawText) as Record<string, unknown>;
+      } catch {
+        lastErrorResult = {
+          success: false,
+          status: 502,
+          error: 'gemini_malformed_response',
+          message: 'Dịch vụ AI trả về phản hồi không đúng định dạng JSON.',
+        };
+        continue;
       }
 
-      const sanitizedMessage = sanitizeErrorMessage(upstreamErrorMessage, apiKey);
-
-      console.error(
-        `[GEMINI_UPSTREAM_ERROR] HTTP status: ${response.status} | model: ${model} | error.status: ${upstreamErrorStatus} | error.message: ${sanitizedMessage}`
-      );
-
-      if (response.status === 429) {
+      // Kiểm tra các trường hợp bị chặn bởi bộ lọc an toàn (Safety Filter / Prompt Feedback)
+      const promptFeedback = responseData.promptFeedback as Record<string, unknown> | undefined;
+      if (promptFeedback?.blockReason) {
         return {
           success: false,
-          status: 503,
-          error: 'gemini_rate_limit',
-          message: `Dịch vụ AI từ nhà cung cấp (${model}) đã đạt giới hạn: ${sanitizedMessage || 'Rate limit / Quota exceeded'}`,
+          status: 422,
+          error: 'ai_content_blocked',
+          message: 'Nội dung ảnh bị hệ thống an toàn của nhà cung cấp AI từ chối xử lý.',
         };
       }
 
+      const candidates = responseData.candidates as Array<Record<string, unknown>> | undefined;
+      const candidate = candidates?.[0];
+      const finishReason = candidate?.finishReason;
+
+      // 1. Phản hồi bị cắt ngắn do vượt quá token
+      if (finishReason === 'MAX_TOKENS') {
+        return {
+          success: false,
+          status: 502,
+          error: 'ai_response_truncated',
+          message: 'Dữ liệu trích xuất từ AI bị vượt quá giới hạn độ dài và bị cắt ngắn.',
+        };
+      }
+
+      // 2. Phản hồi bị chặn bởi bộ lọc an toàn
+      if (!candidate || finishReason === 'SAFETY' || finishReason === 'RECITATION' || finishReason === 'BLOCKLIST') {
+        return {
+          success: false,
+          status: 422,
+          error: 'ai_response_blocked',
+          message: 'Phản hồi từ AI bị chặn bởi chính sách an toàn nội dung.',
+        };
+      }
+
+      const content = candidate.content as Record<string, unknown> | undefined;
+      const parts = content?.parts as Array<Record<string, unknown>> | undefined;
+
+      // Gom text từ các parts không phải thinking
+      let rawTextCandidate = '';
+      if (Array.isArray(parts)) {
+        for (const part of parts) {
+          if (part.thought === true) {
+            continue;
+          }
+          if (typeof part.text === 'string' && part.text.trim().length > 0) {
+            rawTextCandidate += (rawTextCandidate ? '\n' : '') + part.text;
+          }
+        }
+        if (!rawTextCandidate && parts.length > 0) {
+          const lastPart = parts[parts.length - 1];
+          if (typeof lastPart?.text === 'string') {
+            rawTextCandidate = lastPart.text;
+          }
+        }
+      }
+
+      // Trích xuất JSON sạch (loại bỏ markdown codeblock, BOM, text bao ngoài)
+      const cleanJsonText = extractJsonText(rawTextCandidate);
+
+      if (!cleanJsonText) {
+        lastErrorResult = {
+          success: false,
+          status: 502,
+          error: 'ai_empty_response',
+          message: 'Dịch vụ AI không trả về dữ liệu nội dung.',
+        };
+        continue;
+      }
+
+      // Parse JSON đầu ra từ Gemini dưới dạng unknown rồi kiểm tra runtime
+      let parsedJson: unknown;
+      try {
+        parsedJson = JSON.parse(cleanJsonText);
+      } catch {
+        lastErrorResult = {
+          success: false,
+          status: 502,
+          error: 'gemini_malformed_extraction',
+          message: 'Dữ liệu trích xuất từ AI không đúng định dạng JSON yêu cầu.',
+        };
+        continue;
+      }
+
+      const validatedResult = validateRuntimeExtraction(parsedJson);
+      if (!validatedResult) {
+        lastErrorResult = {
+          success: false,
+          status: 502,
+          error: 'gemini_schema_mismatch',
+          message: 'Dữ liệu trích xuất từ AI không thỏa mãn lược đồ dữ liệu quy định.',
+        };
+        continue;
+      }
+
       return {
-        success: false,
-        status: 502,
-        error: 'gemini_api_error',
-        message: `Lỗi từ dịch vụ AI (${model}): ${sanitizedMessage || 'Không thể nhận phản hồi hợp lệ.'}`,
+        success: true,
+        status: 200,
+        data: validatedResult,
+        durationMs: Math.round(performance.now() - startTime),
       };
-    }
+    } catch (err: unknown) {
+      clearTimeout(timeoutId);
+      const isAbort =
+        (err instanceof DOMException && err.name === 'AbortError') ||
+        (err instanceof Error && err.name === 'AbortError');
 
-    // Đọc text phản hồi kèm giới hạn dung lượng để chống tràn bộ nhớ
-    const rawText = await readLimitedResponseText(response, MAX_RESPONSE_BYTES);
-
-    let responseData: Record<string, unknown>;
-    try {
-      responseData = JSON.parse(rawText) as Record<string, unknown>;
-    } catch {
-      return {
-        success: false,
-        status: 502,
-        error: 'gemini_malformed_response',
-        message: 'Dịch vụ AI trả về phản hồi không đúng định dạng JSON.',
-      };
-    }
-
-    // Kiểm tra các trường hợp bị chặn bởi bộ lọc an toàn (Safety Filter / Prompt Feedback)
-    const promptFeedback = responseData.promptFeedback as Record<string, unknown> | undefined;
-    if (promptFeedback?.blockReason) {
-      return {
-        success: false,
-        status: 422,
-        error: 'ai_content_blocked',
-        message: 'Nội dung ảnh bị hệ thống an toàn của nhà cung cấp AI từ chối xử lý.',
-      };
-    }
-
-    const candidates = responseData.candidates as Array<Record<string, unknown>> | undefined;
-    const candidate = candidates?.[0];
-    const finishReason = candidate?.finishReason;
-
-    // 1. Phản hồi bị cắt ngắn do vượt quá token
-    if (finishReason === 'MAX_TOKENS') {
-      return {
-        success: false,
-        status: 502,
-        error: 'ai_response_truncated',
-        message: 'Dữ liệu trích xuất từ AI bị vượt quá giới hạn độ dài và bị cắt ngắn.',
-      };
-    }
-
-    // 2. Phản hồi bị chặn bởi bộ lọc an toàn
-    if (!candidate || finishReason === 'SAFETY' || finishReason === 'RECITATION' || finishReason === 'BLOCKLIST') {
-      return {
-        success: false,
-        status: 422,
-        error: 'ai_response_blocked',
-        message: 'Phản hồi từ AI bị chặn bởi chính sách an toàn nội dung.',
-      };
-    }
-
-    const content = candidate.content as Record<string, unknown> | undefined;
-    const parts = content?.parts as Array<Record<string, unknown>> | undefined;
-
-    // Gom text từ các parts không phải thinking
-    let rawTextCandidate = '';
-    if (Array.isArray(parts)) {
-      for (const part of parts) {
-        if (part.thought === true) {
+      if (isAbort) {
+        if (mIdx < candidateModels.length - 1) {
+          console.warn(`[GEMINI_TIMEOUT_FALLBACK] Model ${model} timeout, chuyển sang model tiếp theo...`);
           continue;
         }
-        if (typeof part.text === 'string' && part.text.trim().length > 0) {
-          rawTextCandidate += (rawTextCandidate ? '\n' : '') + part.text;
-        }
+        return {
+          success: false,
+          status: 504,
+          error: 'gemini_timeout',
+          message: 'Yêu cầu phân tích ảnh qua AI đã vượt quá thời gian chờ cho phép (25 giây).',
+        };
       }
-      if (!rawTextCandidate && parts.length > 0) {
-        const lastPart = parts[parts.length - 1];
-        if (typeof lastPart?.text === 'string') {
-          rawTextCandidate = lastPart.text;
-        }
+
+      console.error(`[GEMINI_FETCH_EXCEPTION] model: ${model}`, err);
+      if (mIdx < candidateModels.length - 1) {
+        continue;
       }
-    }
 
-    // Trích xuất JSON sạch (loại bỏ markdown codeblock, BOM, text bao ngoài)
-    const cleanJsonText = extractJsonText(rawTextCandidate);
-
-    if (!cleanJsonText) {
-      return {
+      lastErrorResult = {
         success: false,
-        status: 502,
-        error: 'ai_empty_response',
-        message: 'Dịch vụ AI không trả về dữ liệu nội dung.',
+        status: 500,
+        error: 'gemini_network_error',
+        message: 'Đã xảy ra lỗi kết nối mạng khi giao tiếp với dịch vụ AI.',
       };
     }
-
-    // Parse JSON đầu ra từ Gemini dưới dạng unknown rồi kiểm tra runtime
-    let parsedJson: unknown;
-    try {
-      parsedJson = JSON.parse(cleanJsonText);
-    } catch {
-      return {
-        success: false,
-        status: 502,
-        error: 'gemini_malformed_extraction',
-        message: 'Dữ liệu trích xuất từ AI không đúng định dạng JSON yêu cầu.',
-      };
-    }
-
-    const validatedResult = validateRuntimeExtraction(parsedJson);
-    if (!validatedResult) {
-      return {
-        success: false,
-        status: 502,
-        error: 'gemini_schema_mismatch',
-        message: 'Dữ liệu trích xuất từ AI không thỏa mãn lược đồ dữ liệu quy định.',
-      };
-    }
-
-    return {
-      success: true,
-      status: 200,
-      data: validatedResult,
-      durationMs: Math.round(performance.now() - startTime),
-    };
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      return {
-        success: false,
-        status: 504,
-        error: 'gemini_timeout',
-        message: 'Yêu cầu phân tích ảnh qua AI đã vượt quá thời gian chờ cho phép (35 giây).',
-      };
-    }
-
-    // Luôn trả thông báo cố định an toàn, tuyệt đối không trả err.message hay URL chứa khóa ra client
-    return {
-      success: false,
-      status: 500,
-      error: 'gemini_network_error',
-      message: 'Đã xảy ra lỗi kết nối mạng khi giao tiếp với dịch vụ AI.',
-    };
-  } finally {
-    clearTimeout(timeoutId);
   }
+
+  return (
+    lastErrorResult || {
+      success: false,
+      status: 503,
+      error: 'gemini_all_busy',
+      message: 'Hệ thống AI hiện đang bận do lượng người dùng tăng đột biến. Vui lòng bấm Thử lại sau vài giây.',
+    }
+  );
 }
