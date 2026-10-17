@@ -46,6 +46,13 @@ function saveTestAssetPlugin(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
+  server: {
+    host: true, // Mở mạng nội bộ để điện thoại cùng Wi-Fi truy cập được
+  },
+  build: {
+    // Increase chunk size warning limit to reduce warnings for large bundles
+    chunkSizeWarningLimit: 1000,
+  },
   plugins: [
     react(),
     saveTestAssetPlugin(),

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import type { Product, SortOption } from './types/product';
@@ -10,20 +10,32 @@ import { SearchAndFilter } from './components/SearchAndFilter';
 import { ProductList } from './components/ProductList';
 import { ProductDetailModal } from './components/ProductDetailModal';
 import { ProductDeleteConfirmModal } from './components/ProductDeleteConfirmModal';
-import { DeletedProductsModal } from './components/DeletedProductsModal';
 import { ProductFormModal } from './components/ProductFormModal';
 import { StockInModal } from './components/StockInModal';
-import { ProductHistoryModal } from './components/ProductHistoryModal';
-import { BarcodeScannerModal } from './components/BarcodeScannerModal';
-import { ImageSearchModal } from './components/ImageSearchModal';
-import { VisualSearchTestModal } from './components/VisualSearchTestModal';
+
+// Tải trễ (lazy loading) các modal lớn để tối ưu dung lượng tải lần đầu cho điện thoại
+const DeletedProductsModal = lazy(() =>
+  import('./components/DeletedProductsModal').then((m) => ({ default: m.DeletedProductsModal }))
+);
+const ProductHistoryModal = lazy(() =>
+  import('./components/ProductHistoryModal').then((m) => ({ default: m.ProductHistoryModal }))
+);
+const BarcodeScannerModal = lazy(() =>
+  import('./components/BarcodeScannerModal').then((m) => ({ default: m.BarcodeScannerModal }))
+);
+const ImageSearchModal = lazy(() =>
+  import('./components/ImageSearchModal').then((m) => ({ default: m.ImageSearchModal }))
+);
+const VisualSearchTestModal = lazy(() =>
+  import('./components/VisualSearchTestModal').then((m) => ({ default: m.VisualSearchTestModal }))
+);
 import { UserProfilePage } from './components/UserProfilePage';
 import { Sidebar } from './components/Sidebar';
 import { OfflineBanner } from './components/OfflineBanner';
 import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { clearProductImageCache } from './services/storageService';
-import { syncBatchEmbeddings } from './services/aiSearchService';
+// Dynamic import of syncBatchEmbeddings will be used in handleSyncAi
 import {
   fetchActiveProducts,
   fetchDeletedProducts,
@@ -743,7 +755,7 @@ export function App() {
     setIsSyncingAi(true);
     showToast({ text: 'Đang kiểm tra và trích xuất đặc trưng ảnh...', type: 'info' });
     try {
-      const res = await syncBatchEmbeddings();
+      const res = await (await import('./services/aiSearchService')).syncBatchEmbeddings();
       if (res.success) {
         showToast({
           text: res.message,
@@ -1122,16 +1134,18 @@ export function App() {
 
       {/* Modal Quản lý mục "Đã xóa" dành cho thành viên có quyền can_edit */}
       {isDeletedModalOpen && (
-        <DeletedProductsModal
-          isOpen={isDeletedModalOpen}
-          onClose={handleCloseDeletedProductsModal}
-          deletedProducts={deletedProducts}
-          isLoading={isDeletedLoading}
-          error={deletedError}
-          onRestore={handleRestoreProduct}
-          onRetry={handleOpenDeletedProductsModal}
-          isOnline={isOnline}
-        />
+        <Suspense fallback={null}>
+          <DeletedProductsModal
+            isOpen={isDeletedModalOpen}
+            onClose={handleCloseDeletedProductsModal}
+            deletedProducts={deletedProducts}
+            isLoading={isDeletedLoading}
+            error={deletedError}
+            onRestore={handleRestoreProduct}
+            onRetry={handleOpenDeletedProductsModal}
+            isOnline={isOnline}
+          />
+        </Suspense>
       )}
 
       {/* Modal Thêm / Chỉnh sửa sản phẩm */}
@@ -1160,42 +1174,50 @@ export function App() {
 
       {/* Modal Lịch sử thay đổi sản phẩm */}
       {isHistoryModalOpen && selectedHistoryProduct && (
-        <ProductHistoryModal
-          isOpen={isHistoryModalOpen}
-          product={selectedHistoryProduct}
-          onClose={handleCloseHistoryModal}
-          triggerElementRef={historyTriggerRef}
-        />
+        <Suspense fallback={null}>
+          <ProductHistoryModal
+            isOpen={isHistoryModalOpen}
+            product={selectedHistoryProduct}
+            onClose={handleCloseHistoryModal}
+            triggerElementRef={historyTriggerRef}
+          />
+        </Suspense>
       )}
 
       {/* Modal Quét mã vạch sản phẩm */}
       {isBarcodeScannerOpen && (
-        <BarcodeScannerModal
-          isOpen={isBarcodeScannerOpen}
-          onClose={handleCloseBarcodeScanner}
-          onSelectProduct={handleSelectProductFromBarcode}
-          triggerElementRef={barcodeScannerTriggerRef}
-        />
+        <Suspense fallback={null}>
+          <BarcodeScannerModal
+            isOpen={isBarcodeScannerOpen}
+            onClose={handleCloseBarcodeScanner}
+            onSelectProduct={handleSelectProductFromBarcode}
+            triggerElementRef={barcodeScannerTriggerRef}
+          />
+        </Suspense>
       )}
 
       {/* Modal Tìm kiếm sản phẩm bằng ảnh bao bì qua AI */}
       {isImageSearchOpen && (
-        <ImageSearchModal
-          isOpen={isImageSearchOpen}
-          onClose={handleCloseImageSearch}
-          onSelectProduct={handleSelectProductFromImageSearch}
-          triggerElementRef={imageSearchTriggerRef}
-          isOnline={isOnline}
-        />
+        <Suspense fallback={null}>
+          <ImageSearchModal
+            isOpen={isImageSearchOpen}
+            onClose={handleCloseImageSearch}
+            onSelectProduct={handleSelectProductFromImageSearch}
+            triggerElementRef={imageSearchTriggerRef}
+            isOnline={isOnline}
+          />
+        </Suspense>
       )}
 
       {/* Modal Kiểm thử 6 kịch bản Visual Search */}
       {isAiTestModalOpen && (
-        <VisualSearchTestModal
-          isOpen={isAiTestModalOpen}
-          onClose={() => setIsAiTestModalOpen(false)}
-          onSuccessReload={reloadProducts}
-        />
+        <Suspense fallback={null}>
+          <VisualSearchTestModal
+            isOpen={isAiTestModalOpen}
+            onClose={() => setIsAiTestModalOpen(false)}
+            onSuccessReload={reloadProducts}
+          />
+        </Suspense>
       )}
 
       {/* Hộp thoại thông báo cập nhật phiên bản mới PWA (registerType: 'prompt') */}

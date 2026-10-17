@@ -1,5 +1,5 @@
 // Service to invoke search-product-image Supabase Edge Function
-import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/supabase.ts';
 import type { AiSearchResponse } from '../types/aiSearch';
 
 export const MAX_IMAGE_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
@@ -329,11 +329,5 @@ if (typeof window !== 'undefined') {
     supabase,
   };
 }
-
-import('../utils/visualSearchTestRunner').then(({ runVisualSearchScenarios }) => {
-  if (typeof window !== 'undefined') {
-    (window as unknown as Record<string, unknown>).__runVisualSearchSuite = runVisualSearchScenarios;
-  }
-});
 
 

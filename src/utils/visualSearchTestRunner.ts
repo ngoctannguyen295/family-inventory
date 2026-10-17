@@ -1,7 +1,12 @@
 import { supabase } from '../lib/supabase';
 import { uploadProductImage } from '../services/storageService';
 import { createProduct, updateProduct, softDeleteProduct, restoreProduct } from '../services/productService';
-import { syncBatchEmbeddings, searchProductByImage, type SyncBatchResult } from '../services/aiSearchService';
+import {
+  searchProductByImage,
+  testVisualEmbedding,
+  syncBatchEmbeddings,
+  type SyncBatchResult,
+} from '../services/aiSearchService';
 
 export interface ScenarioResult {
   scenarioNumber: number;
@@ -42,7 +47,6 @@ async function getActiveUserId(): Promise<string> {
 export async function runEmbeddingTest(): Promise<ScenarioResult> {
   const start = performance.now();
   try {
-    const { testVisualEmbedding } = await import('../services/aiSearchService');
     const testRes = await testVisualEmbedding('cáp sạc USB Type-C màu trắng');
     const latencyMs = Math.round(performance.now() - start);
     const passed = Boolean(testRes.success && testRes.dimensions === 768);

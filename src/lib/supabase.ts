@@ -1,7 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const metaEnv = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : undefined;
+const supabaseUrl =
+  metaEnv?.VITE_SUPABASE_URL ?? (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_URL : undefined);
+const supabasePublishableKey =
+  metaEnv?.VITE_SUPABASE_PUBLISHABLE_KEY ?? (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_PUBLISHABLE_KEY : undefined);
 
 export const isSupabaseConfigured = Boolean(
   typeof supabaseUrl === 'string' &&
@@ -12,5 +15,5 @@ export const isSupabaseConfigured = Boolean(
 );
 
 export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabasePublishableKey)
+  ? createClient(supabaseUrl as string, supabasePublishableKey as string)
   : null;
