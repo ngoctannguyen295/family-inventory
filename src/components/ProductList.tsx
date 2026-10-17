@@ -11,6 +11,8 @@ interface ProductListProps {
   onOpenBarcodeScanner?: (triggerEl: HTMLElement) => void;
   onOpenImageSearch?: (triggerEl: HTMLElement) => void;
   onOpenAddModal?: () => void;
+  cartQuantities?: Record<string, number>;
+  onAddToCart?: (product: Product) => void;
 }
 
 export function ProductList({
@@ -23,6 +25,8 @@ export function ProductList({
   onOpenBarcodeScanner,
   onOpenImageSearch,
   onOpenAddModal,
+  cartQuantities = {},
+  onAddToCart,
 }: ProductListProps) {
   // Trường hợp cơ sở dữ liệu hoàn toàn chưa có sản phẩm nào
   if (totalInDatabase === 0) {
@@ -205,6 +209,8 @@ export function ProductList({
           key={product.id}
           product={product}
           onClick={onSelectProduct}
+          cartQuantity={cartQuantities[product.id] || 0}
+          onAddToCart={onAddToCart}
         />
       ))}
     </div>

@@ -17,6 +17,8 @@ interface SidebarProps {
   onOpenImageSearch: () => void;
   onOpenBarcodeScanner: () => void;
   onOpenTrash: () => void;
+  onOpenCheckout: () => void;
+  cartCount?: number;
   onSignOut: () => void;
   isSigningOut?: boolean;
 }
@@ -36,6 +38,8 @@ export function Sidebar({
   onOpenImageSearch,
   onOpenBarcodeScanner,
   onOpenTrash,
+  onOpenCheckout,
+  cartCount = 0,
   onSignOut,
   isSigningOut,
 }: SidebarProps) {
@@ -124,6 +128,27 @@ export function Sidebar({
                 <span>Danh sách mặt hàng</span>
               </div>
               <span className="sidebar-badge sidebar-badge-count">{totalProducts}</span>
+            </button>
+
+            {/* Mục: Tính tiền / Bán hàng */}
+            <button
+              type="button"
+              className="sidebar-nav-item"
+              onClick={() => handleNavClick(onOpenCheckout)}
+              title="Mở máy tính tiền, tạo đơn bán và trừ tồn kho"
+            >
+              <div className="sidebar-nav-item-left">
+                <span className="sidebar-item-icon" aria-hidden="true">
+                  🧮
+                </span>
+                <span>Tính tiền / Bán hàng</span>
+              </div>
+              <span
+                className={`sidebar-badge ${cartCount > 0 ? 'sidebar-badge-action' : 'sidebar-badge-stock'}`}
+                style={cartCount > 0 ? { background: '#16a34a', color: '#ffffff' } : {}}
+              >
+                {cartCount > 0 ? `${cartCount} món` : 'POS'}
+              </span>
             </button>
 
             {/* Mục 1: Nhập kho (Chỉnh số lượng & giá sản phẩm có sẵn) */}

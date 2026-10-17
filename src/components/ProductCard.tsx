@@ -6,9 +6,16 @@ import { ProductImage } from './ProductImage';
 interface ProductCardProps {
   product: Product;
   onClick: (product: Product, triggerEl: HTMLElement) => void;
+  cartQuantity?: number;
+  onAddToCart?: (product: Product) => void;
 }
 
-export function ProductCard({ product, onClick }: ProductCardProps) {
+export function ProductCard({
+  product,
+  onClick,
+  cartQuantity = 0,
+  onAddToCart,
+}: ProductCardProps) {
   const cardRef = useRef<HTMLElement>(null);
   const isOutOfStock = product.stock <= 0;
 
@@ -90,6 +97,27 @@ export function ProductCard({ product, onClick }: ProductCardProps) {
             </strong>
           </span>
         </div>
+
+        {onAddToCart && (
+          <div className="product-card-actions">
+            <button
+              type="button"
+              className={`btn-add-to-cart ${cartQuantity > 0 ? 'in-cart' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddToCart(product);
+              }}
+              disabled={isOutOfStock}
+              title={isOutOfStock ? 'Sản phẩm đã hết hàng' : 'Thêm vào đơn tính tiền'}
+              aria-label={`Thêm ${product.name} vào đơn tính tiền`}
+            >
+              <span>🛒</span>
+              <span>
+                {cartQuantity > 0 ? `+1 (Đã chọn: ${cartQuantity})` : '+ Tính tiền'}
+              </span>
+            </button>
+          </div>
+        )}
       </div>
     </article>
   );

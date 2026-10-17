@@ -29,6 +29,10 @@ const ImageSearchModal = lazy(() =>
 const VisualSearchTestModal = lazy(() =>
   import('./components/VisualSearchTestModal').then((m) => ({ default: m.VisualSearchTestModal }))
 );
+const CheckoutModal = lazy(() =>
+  import('./components/CheckoutModal').then((m) => ({ default: m.CheckoutModal }))
+);
+import type { CartItem } from './types/checkout';
 import { UserProfilePage } from './components/UserProfilePage';
 import { Sidebar } from './components/Sidebar';
 import { OfflineBanner } from './components/OfflineBanner';
@@ -41,6 +45,7 @@ import {
   fetchDeletedProducts,
   softDeleteProduct,
   restoreProduct,
+  checkoutProducts,
 } from './services/productService';
 import './App.css';
 
@@ -146,6 +151,31 @@ export function App() {
   // 5.8 Quản lý điều hướng màn hình (Kho hàng vs Chỉnh sửa hồ sơ cá nhân)
   const [currentView, setCurrentView] = useState<'inventory' | 'profile'>('inventory');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // 5.9 Quản lý đơn tính tiền / giỏ hàng
+  const [cartItems, setCartItems] = useState<CartItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('family_inventory_cart');
+      if (saved) {
+        return JSON.parse(saved) as CartItem[];
+      }
+    } catch {
+      // Bỏ qua lỗi truy cập localStorage
+    }
+    return [];
+  });
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const isCheckoutScanningRef = useRef(false);
+
+  // Tự động lưu giỏ hàng vào localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('family_inventory_cart', JSON.stringify(cartItems));
+    } catch {
+      // Bỏ qua lỗi ghi localStorage
+    }
+  }, [cartItems]);
 
   // 6. Thông báo Toast
   const [toast, setToast] = useState<ToastNotification | null>(null);
@@ -568,11 +598,122 @@ export function App() {
     setIsBarcodeScannerOpen(false);
   }, []);
 
+  // Thao tác với Đơn tính tiền / Giỏ hàng
+  const handleAddToCart = useCallback((product: Product, quantity = 1) => {
+    setCartItems((prev) => {
+      const idx = prev.findIndex((i) => i.productId === product.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], quantity: next[idx].quantity + quantity };
+        return next;
+      }
+      return [
+        ...prev,
+        {
+          productId: product.id,
+          product,
+          quantity,
+          salePrice: product.salePrice,
+        },
+      ];
+    });
+
+    showToast({
+      text: `Đã thêm "${product.name}" vào đơn tính tiền.`,
+      type: 'success',
+      actionLabel: 'Xem đơn',
+      onAction: () => setIsCheckoutModalOpen(true),
+    });
+  }, [showToast]);
+
+  const handleUpdateCartQuantity = useCallback((productId: string, quantity: number) => {
+    setCartItems((prev) => {
+      if (quantity <= 0) {
+        return prev.filter((i) => i.productId !== productId);
+      }
+      return prev.map((i) => (i.productId === productId ? { ...i, quantity } : i));
+    });
+  }, []);
+
+  const handleRemoveFromCart = useCallback((productId: string) => {
+    setCartItems((prev) => prev.filter((i) => i.productId !== productId));
+  }, []);
+
+  const handleClearCart = useCallback(() => {
+    setCartItems([]);
+  }, []);
+
+  const handleConfirmCheckout = useCallback(async (items: CartItem[]) => {
+    if (items.length === 0) return;
+    setIsCheckingOut(true);
+
+    try {
+      const payload = items.map((i) => ({
+        productId: i.productId,
+        quantity: i.quantity,
+      }));
+
+      const res = await checkoutProducts(payload);
+
+      if (res.error) {
+        showToast({
+          text: `Thanh toán thất bại: ${res.error}`,
+          type: 'warning',
+        });
+        return;
+      }
+
+      if (res.data && res.data.length > 0) {
+        const updatedMap = new Map(res.data.map((p) => [p.id, p]));
+        setProducts((prev) => prev.map((p) => updatedMap.get(p.id) || p));
+      }
+
+      const totalQty = items.reduce((sum, i) => sum + i.quantity, 0);
+      const totalAmount = items.reduce((sum, i) => sum + i.quantity * i.salePrice, 0);
+
+      setCartItems([]);
+      setIsCheckoutModalOpen(false);
+
+      showToast({
+        text: `✅ Đã bán ${totalQty} sản phẩm (Tổng: ${formatCurrency(totalAmount)}) và trừ kho thành công!`,
+        type: 'success',
+      });
+    } catch (err) {
+      showToast({
+        text: `Lỗi kết nối khi thanh toán: ${err instanceof Error ? err.message : 'Vui lòng thử lại.'}`,
+        type: 'warning',
+      });
+    } finally {
+      setIsCheckingOut(false);
+    }
+  }, [showToast]);
+
+  const cartCount = useMemo(() => {
+    return cartItems.reduce((acc, item) => acc + item.quantity, 0);
+  }, [cartItems]);
+
+  const cartTotalAmount = useMemo(() => {
+    return cartItems.reduce((acc, item) => acc + item.quantity * item.salePrice, 0);
+  }, [cartItems]);
+
+  const cartQuantities = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const item of cartItems) {
+      map[item.productId] = item.quantity;
+    }
+    return map;
+  }, [cartItems]);
+
   // Xử lý khi chọn sản phẩm từ kết quả quét mã vạch
   const handleSelectProductFromBarcode = useCallback((scannedProduct: Product) => {
+    if (isCheckoutScanningRef.current) {
+      isCheckoutScanningRef.current = false;
+      handleAddToCart(scannedProduct, 1);
+      return;
+    }
     setSearchTerm(scannedProduct.barcode || scannedProduct.code);
     setSelectedCategory('ALL');
-  }, []);
+  }, [handleAddToCart]);
 
   // Mở modal Tìm bằng ảnh (tự động đóng Quét mã vạch để tránh xung đột camera)
   const handleOpenImageSearch = useCallback((triggerEl: HTMLElement) => {
@@ -902,6 +1043,8 @@ export function App() {
         onOpenImageSearch={() => handleOpenImageSearch(addBtnRef.current || document.body)}
         onOpenBarcodeScanner={() => handleOpenBarcodeScanner(addBtnRef.current || document.body)}
         onOpenTrash={() => setIsDeletedModalOpen(true)}
+        onOpenCheckout={() => setIsCheckoutModalOpen(true)}
+        cartCount={cartCount}
         onSignOut={handleSignOut}
         isSigningOut={isSigningOut}
       />
@@ -926,6 +1069,37 @@ export function App() {
           </div>
 
           <div className="mobile-app-bar-right">
+            {/* Nút Tính tiền nhanh trên thanh di động */}
+            <button
+              type="button"
+              className="mobile-bar-action-btn"
+              onClick={() => setIsCheckoutModalOpen(true)}
+              title="Máy tính tiền / Bán hàng"
+              aria-label={`Mở máy tính tiền, ${cartCount} sản phẩm`}
+              style={{ position: 'relative' }}
+            >
+              <span>🧮</span>
+              {cartCount > 0 && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '-3px',
+                    right: '-3px',
+                    background: '#16a34a',
+                    color: '#ffffff',
+                    fontSize: '10px',
+                    fontWeight: 800,
+                    borderRadius: '9999px',
+                    padding: '1px 5px',
+                    lineHeight: 1.2,
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                  }}
+                >
+                  {cartCount}
+                </span>
+              )}
+            </button>
+
             {canEdit && (
               <button
                 type="button"
@@ -972,6 +1146,8 @@ export function App() {
               addBtnRef={addBtnRef}
               onOpenProfile={handleOpenProfile}
               onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
+              cartCount={cartCount}
+              onOpenCheckout={() => setIsCheckoutModalOpen(true)}
             />
 
         {/* Thông báo lỗi khi đăng xuất thất bại */}
@@ -1082,6 +1258,8 @@ export function App() {
                 onOpenBarcodeScanner={handleOpenBarcodeScanner}
                 onOpenImageSearch={handleOpenImageSearch}
                 onOpenAddModal={handleOpenAddModal}
+                cartQuantities={cartQuantities}
+                onAddToCart={handleAddToCart}
               />
             </>
           )}
@@ -1127,6 +1305,8 @@ export function App() {
           onViewHistory={(prod, triggerEl) => handleOpenHistoryModal(prod, triggerEl)}
           onOpenDeleteConfirm={handleOpenDeleteConfirm}
           triggerElementRef={detailTriggerRef}
+          cartQuantity={selectedDetailProduct ? cartQuantities[selectedDetailProduct.id] || 0 : 0}
+          onAddToCart={handleAddToCart}
         />
       )}
 
@@ -1227,6 +1407,63 @@ export function App() {
             isOpen={isAiTestModalOpen}
             onClose={() => setIsAiTestModalOpen(false)}
             onSuccessReload={reloadProducts}
+          />
+        </Suspense>
+      )}
+
+      {/* Thanh Giỏ hàng / Tính tiền nổi dưới màn hình khi có sản phẩm được chọn */}
+      {cartItems.length > 0 && !isCheckoutModalOpen && (
+        <div
+          className="floating-cart-bar"
+          onClick={() => setIsCheckoutModalOpen(true)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setIsCheckoutModalOpen(true);
+            }
+          }}
+          aria-label={`Mở đơn tính tiền gồm ${cartCount} sản phẩm, tổng ${formatCurrency(cartTotalAmount)}`}
+        >
+          <div className="floating-cart-left">
+            <div className="floating-cart-icon-box">
+              <span aria-hidden="true">🛒</span>
+              <span className="floating-cart-badge">{cartCount}</span>
+            </div>
+            <div className="floating-cart-info">
+              <span className="floating-cart-count">
+                {cartItems.length} mặt hàng ({cartCount} món)
+              </span>
+              <span className="floating-cart-total">{formatCurrency(cartTotalAmount)}</span>
+            </div>
+          </div>
+          <div className="floating-cart-right">
+            <span>Tính tiền ❯</span>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Máy tính tiền / Bán hàng */}
+      {isCheckoutModalOpen && (
+        <Suspense fallback={null}>
+          <CheckoutModal
+            isOpen={isCheckoutModalOpen}
+            onClose={() => setIsCheckoutModalOpen(false)}
+            cartItems={cartItems}
+            allProducts={products}
+            onAddToCart={handleAddToCart}
+            onUpdateQuantity={handleUpdateCartQuantity}
+            onRemoveItem={handleRemoveFromCart}
+            onClearCart={handleClearCart}
+            onConfirmCheckout={handleConfirmCheckout}
+            isCheckingOut={isCheckingOut}
+            canEdit={canEdit}
+            onOpenBarcodeScanner={() => {
+              isCheckoutScanningRef.current = true;
+              setIsBarcodeScannerOpen(true);
+            }}
+            onShowToast={(msg, type) => showToast({ text: msg, type })}
           />
         </Suspense>
       )}

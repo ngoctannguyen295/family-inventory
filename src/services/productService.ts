@@ -454,3 +454,92 @@ export async function findProductByBarcode(
     return { data: null, error: message };
   }
 }
+
+/**
+ * Thực hiện thanh toán và trừ số lượng tồn kho theo đơn hàng
+ * Kiểm tra tính hợp lệ về số lượng tồn kho trước khi trừ
+ */
+export async function checkoutProducts(
+  items: Array<{ productId: string; quantity: number }>
+): Promise<ServiceResult<Product[]>> {
+  if (!supabase) {
+    return { data: null, error: 'Chưa cấu hình kết nối Supabase.' };
+  }
+
+  if (!items || items.length === 0) {
+    return { data: null, error: 'Đơn hàng chưa có sản phẩm nào.' };
+  }
+
+  try {
+    const productIds = items.map((i) => i.productId);
+
+    // 1. Lấy thông tin các sản phẩm mới nhất từ database
+    const { data: latestRows, error: fetchErr } = await supabase
+      .from('products')
+      .select('*')
+      .in('id', productIds)
+      .is('deleted_at', null);
+
+    if (fetchErr) {
+      const parsed = parseSupabaseError(fetchErr);
+      return { data: null, error: `Lỗi truy vấn sản phẩm: ${parsed.message}` };
+    }
+
+    const latestProducts = (latestRows as ProductRow[]).map(mapProductRow);
+    const productMap = new Map<string, Product>();
+    for (const p of latestProducts) {
+      productMap.set(p.id, p);
+    }
+
+    // 2. Kiểm tra tồn kho trước khi thực hiện trừ
+    for (const item of items) {
+      const p = productMap.get(item.productId);
+      if (!p) {
+        return { data: null, error: 'Có sản phẩm trong đơn không còn tồn tại hoặc đã bị xóa.' };
+      }
+      if (item.quantity <= 0) {
+        return { data: null, error: `Số lượng cho "${p.name}" phải lớn hơn 0.` };
+      }
+      if (p.stock < item.quantity) {
+        return {
+          data: null,
+          error: `Sản phẩm "${p.name}" chỉ còn tồn kho ${p.stock} ${p.unit}, không đủ để trừ ${item.quantity} ${p.unit}.`,
+        };
+      }
+    }
+
+    // 3. Thực hiện trừ tồn kho lần lượt cho từng sản phẩm
+    const updatedProducts: Product[] = [];
+    for (const item of items) {
+      const p = productMap.get(item.productId)!;
+      const newStock = p.stock - item.quantity;
+
+      const { data: updatedRow, error: updateErr } = await supabase
+        .from('products')
+        .update({ stock: newStock })
+        .eq('id', p.id)
+        .is('deleted_at', null)
+        .select()
+        .maybeSingle();
+
+      if (updateErr) {
+        const parsed = parseSupabaseError(updateErr);
+        return {
+          data: null,
+          error: `Lỗi khi cập nhật kho cho "${p.name}": ${parsed.message}`,
+        };
+      }
+
+      if (updatedRow) {
+        updatedProducts.push(mapProductRow(updatedRow as ProductRow));
+      }
+    }
+
+    return { data: updatedProducts, error: null };
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : 'Lỗi không xác định khi thanh toán đơn hàng.';
+    return { data: null, error: message };
+  }
+}
+

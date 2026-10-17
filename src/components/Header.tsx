@@ -10,6 +10,8 @@ interface HeaderProps {
   onOpenProfile?: (triggerEl: HTMLElement) => void;
   profileTriggerRef?: React.RefObject<HTMLButtonElement | null>;
   onToggleMobileMenu?: () => void;
+  cartCount?: number;
+  onOpenCheckout?: () => void;
 }
 
 export function Header({
@@ -22,6 +24,8 @@ export function Header({
   onOpenProfile,
   profileTriggerRef,
   onToggleMobileMenu,
+  cartCount = 0,
+  onOpenCheckout,
 }: HeaderProps) {
   const canEdit = Boolean(member?.is_active && member?.can_edit);
 
@@ -96,18 +100,63 @@ export function Header({
           </div>
         </div>
 
-        {canEdit && onOpenAddModal && (
-          <button
-            ref={addBtnRef}
-            type="button"
-            className="btn-add-product"
-            onClick={onOpenAddModal}
-            aria-label="Thêm sản phẩm mới vào kho hàng"
-          >
-            <span className="btn-add-icon" aria-hidden="true">＋</span>
-            <span>Thêm sản phẩm</span>
-          </button>
-        )}
+        <div className="header-actions-group" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {onOpenCheckout && (
+            <button
+              type="button"
+              className="btn-open-checkout"
+              onClick={onOpenCheckout}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                height: '42px',
+                padding: '0 16px',
+                borderRadius: '10px',
+                background: cartCount > 0 ? '#16a34a' : '#0284c7',
+                color: '#ffffff',
+                border: 'none',
+                fontWeight: 700,
+                fontSize: '14px',
+                cursor: 'pointer',
+                boxShadow: cartCount > 0 ? '0 2px 8px rgba(22, 163, 74, 0.35)' : '0 2px 6px rgba(2, 132, 199, 0.25)',
+                transition: 'all 0.15s ease',
+              }}
+              title="Mở máy tính tiền / Đơn bán hàng"
+              aria-label={`Mở máy tính tiền, hiện có ${cartCount} sản phẩm trong đơn`}
+            >
+              <span style={{ fontSize: '18px' }} aria-hidden="true">🧮</span>
+              <span>Tính tiền</span>
+              {cartCount > 0 && (
+                <span
+                  style={{
+                    background: '#ffffff',
+                    color: '#16a34a',
+                    padding: '1px 8px',
+                    borderRadius: '9999px',
+                    fontSize: '12px',
+                    fontWeight: 800,
+                  }}
+                >
+                  {cartCount}
+                </span>
+              )}
+            </button>
+          )}
+
+          {canEdit && onOpenAddModal && (
+            <button
+              ref={addBtnRef}
+              type="button"
+              className="btn-add-product"
+              onClick={onOpenAddModal}
+              aria-label="Thêm sản phẩm mới vào kho hàng"
+            >
+              <span className="btn-add-icon" aria-hidden="true">＋</span>
+              <span>Thêm sản phẩm</span>
+            </button>
+          )}
+        </div>
       </div>
     </header>
   );

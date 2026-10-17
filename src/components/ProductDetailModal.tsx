@@ -13,6 +13,8 @@ interface ProductDetailModalProps {
   onViewHistory?: (product: Product, triggerEl: HTMLElement) => void;
   onOpenDeleteConfirm?: (product: Product) => void;
   triggerElementRef?: React.RefObject<HTMLElement | null>;
+  cartQuantity?: number;
+  onAddToCart?: (product: Product) => void;
 }
 
 export function ProductDetailModal({
@@ -25,6 +27,8 @@ export function ProductDetailModal({
   onViewHistory,
   onOpenDeleteConfirm,
   triggerElementRef,
+  cartQuantity = 0,
+  onAddToCart,
 }: ProductDetailModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
@@ -218,6 +222,36 @@ export function ProductDetailModal({
           </div>
 
           <div className="footer-right-actions">
+            {onAddToCart && (
+              <button
+                type="button"
+                className={`btn-add-to-cart-detail ${cartQuantity > 0 ? 'in-cart' : ''}`}
+                onClick={() => onAddToCart(product)}
+                disabled={isOutOfStock}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 14px',
+                  borderRadius: '8px',
+                  background: cartQuantity > 0 ? '#0284c7' : '#e0f2fe',
+                  color: cartQuantity > 0 ? '#ffffff' : '#0369a1',
+                  border: '1.5px solid #bae6fd',
+                  fontWeight: 700,
+                  fontSize: '13px',
+                  cursor: isOutOfStock ? 'not-allowed' : 'pointer',
+                  opacity: isOutOfStock ? 0.6 : 1,
+                  transition: 'all 0.15s ease',
+                }}
+                title={isOutOfStock ? 'Hết hàng' : 'Thêm vào đơn tính tiền'}
+              >
+                <span>🛒</span>
+                <span>
+                  {cartQuantity > 0 ? `+1 (Đã chọn: ${cartQuantity})` : '+ Tính tiền'}
+                </span>
+              </button>
+            )}
+
             {canEdit && onStockIn && (
               <button
                 type="button"
