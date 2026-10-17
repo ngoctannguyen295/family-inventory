@@ -38,7 +38,7 @@ import { OfflineBanner } from './components/OfflineBanner';
 import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { clearProductImageCache } from './services/storageService';
-// Dynamic import of syncBatchEmbeddings will be used in handleSyncAi
+// Tự động đồng bộ vector ảnh ngầm khi thêm/sửa sản phẩm
 import {
   fetchActiveProducts,
   fetchDeletedProducts,
@@ -340,6 +340,13 @@ export function App() {
 
         // 2. Tải danh mục hàng hóa
         await reloadProducts(activeMember.can_edit);
+
+        // 3. Tự động kiểm tra và đồng bộ vector ngầm cho các sản phẩm còn pending
+        if (activeMember.can_edit) {
+          import('./services/aiSearchService')
+            .then(({ triggerAutoSyncPendingEmbeddings }) => triggerAutoSyncPendingEmbeddings())
+            .catch((err) => console.warn('[AUTO_SYNC_VECTOR_INIT_WARN]', err));
+        }
       } catch {
         if (!isMounted) return;
         setMemberError('Đã xảy ra lỗi không xác định khi tải dữ liệu.');
@@ -568,6 +575,12 @@ export function App() {
       // Khôi phục thành công: làm mới cả 2 danh sách
       await reloadProducts(true);
 
+      if (productToRestore.imageUrl) {
+        import('./services/aiSearchService')
+          .then(({ triggerAutoSyncPendingEmbeddings }) => triggerAutoSyncPendingEmbeddings())
+          .catch((err) => console.warn('[AUTO_SYNC_VECTOR_RESTORE_WARN]', err));
+      }
+
       showToast({
         text: `Đã khôi phục sản phẩm "${productToRestore.name}" thành công.`,
         type: 'success',
@@ -731,7 +744,7 @@ export function App() {
     setIsImageSearchOpen(true);
     // Tự động kích hoạt đồng bộ vector ngầm cho các sản phẩm còn pending trong kho
     import('./services/aiSearchService')
-      .then(({ syncBatchEmbeddings }) => syncBatchEmbeddings())
+      .then(({ triggerAutoSyncPendingEmbeddings }) => triggerAutoSyncPendingEmbeddings())
       .catch((err) => console.warn('[AUTO_SYNC_VECTOR_OPEN_WARN]', err));
   }, []);
 
@@ -812,10 +825,10 @@ export function App() {
         });
       }
 
-      // Tự động kích hoạt đồng bộ vector ngầm cho sản phẩm có ảnh vừa thêm/sửa
+      // Tự động kích hoạt đồng bộ vector ngầm cho sản phẩm có ảnh vừa thêm/sửa mà không cần nhấn thủ công
       if (savedProduct.imageUrl) {
         import('./services/aiSearchService')
-          .then(({ syncBatchEmbeddings }) => syncBatchEmbeddings())
+          .then(({ triggerAutoSyncPendingEmbeddings }) => triggerAutoSyncPendingEmbeddings())
           .catch((err) => console.warn('[AUTO_SYNC_VECTOR_SAVE_WARN]', err));
       }
     },
@@ -920,32 +933,6 @@ export function App() {
 
   // Quyền chỉnh sửa của người dùng
   const canEdit = Boolean(member?.is_active && member?.can_edit);
-
-  // Xử lý đồng bộ vector đặc trưng ảnh theo batch có kiểm soát
-  const [isSyncingAi, setIsSyncingAi] = useState(false);
-  const handleSyncAi = useCallback(async () => {
-    if (isSyncingAi) return;
-    setIsSyncingAi(true);
-    showToast({ text: 'Đang kiểm tra và trích xuất đặc trưng ảnh...', type: 'info' });
-    try {
-      const res = await (await import('./services/aiSearchService')).syncBatchEmbeddings();
-      if (res.success) {
-        showToast({
-          text: res.message,
-          type: res.syncedCount && res.syncedCount > 0 ? 'success' : 'info',
-        });
-      } else {
-        showToast({
-          text: `Đồng bộ thất bại: ${res.message}`,
-          type: 'warning',
-        });
-      }
-    } catch {
-      showToast({ text: 'Lỗi khi đồng bộ đặc trưng ảnh.', type: 'warning' });
-    } finally {
-      setIsSyncingAi(false);
-    }
-  }, [isSyncingAi, showToast]);
 
   // MÀN HÌNH 1: Thiếu cấu hình Supabase
   if (!isSupabaseConfigured) {
@@ -1283,8 +1270,6 @@ export function App() {
                   canEdit={canEdit}
                   deletedCount={deletedProducts.length}
                   onOpenDeletedProducts={handleOpenDeletedProductsModal}
-                  onSyncAi={handleSyncAi}
-                  isSyncingAi={isSyncingAi}
                   cartCount={cartCount}
                   isCartOnly={isCartOnlyFilter}
                   onToggleCartOnly={() => setIsCartOnlyFilter((prev) => !prev)}

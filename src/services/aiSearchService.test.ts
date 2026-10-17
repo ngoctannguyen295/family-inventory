@@ -4,6 +4,7 @@ import {
   validateImageFileClient,
   MAX_IMAGE_FILE_SIZE,
   ALLOWED_IMAGE_TYPES,
+  triggerAutoSyncPendingEmbeddings,
 } from './aiSearchService.ts';
 
 test('aiSearchService - validateImageFileClient', async (t) => {
@@ -65,3 +66,12 @@ test('aiSearchService - validateImageFileClient', async (t) => {
     assert.equal(validateImageFileClient(webpFile).valid, true);
   });
 });
+
+test('aiSearchService - triggerAutoSyncPendingEmbeddings', async (t) => {
+  await t.test('hoạt động an toàn và không ném ngoại lệ khi chưa cấu hình Supabase Client', async () => {
+    await assert.doesNotReject(async () => {
+      await triggerAutoSyncPendingEmbeddings();
+    });
+  });
+});
+

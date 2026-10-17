@@ -320,14 +320,53 @@ export async function syncBatchEmbeddings(): Promise<SyncBatchResult> {
   }
 }
 
+let isAutoSyncingEmbeddings = false;
+
+/**
+ * Tự động đồng bộ các vector đặc trưng ảnh còn tồn đọng trong nền (không hiển thị UI làm gián đoạn người dùng).
+ * Tự động xử lý tuần tự từng batch (tối đa 5 sản phẩm/batch) cho tới khi không còn sản phẩm pending
+ * hoặc đạt giới hạn an toàn tối đa (tránh vòng lặp vô hạn nếu có lỗi mạng).
+ */
+export async function triggerAutoSyncPendingEmbeddings(): Promise<void> {
+  if (isAutoSyncingEmbeddings) {
+    return;
+  }
+  isAutoSyncingEmbeddings = true;
+  try {
+    let hasMore = true;
+    let rounds = 0;
+    const maxRounds = 10; // Giới hạn tối đa 50 sản phẩm mỗi lần kích hoạt để tránh lặp vô tận
+
+    while (hasMore && rounds < maxRounds) {
+      rounds++;
+      const res = await syncBatchEmbeddings();
+      // Dừng vòng lặp nếu lỗi hoặc không còn bản ghi pending hoặc không xử lý thêm bản ghi nào
+      if (
+        !res.success ||
+        !res.remainingPending ||
+        res.remainingPending === 0 ||
+        (res.batchProcessed ?? 0) === 0
+      ) {
+        hasMore = false;
+      }
+    }
+  } catch (err) {
+    console.warn('[AUTO_SYNC_PENDING_EMBEDDINGS_WARN]', err);
+  } finally {
+    isAutoSyncingEmbeddings = false;
+  }
+}
+
 // Hỗ trợ kiểm thử thực nghiệm trực tiếp từ ngữ cảnh ứng dụng đã đăng nhập
 if (typeof window !== 'undefined') {
   (window as unknown as Record<string, unknown>).__aiSearchTest = {
     testVisualEmbedding,
     syncBatchEmbeddings,
+    triggerAutoSyncPendingEmbeddings,
     searchProductByImage,
     supabase,
   };
 }
+
 
 

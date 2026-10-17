@@ -16,8 +16,6 @@ interface SearchAndFilterProps {
   canEdit?: boolean;
   deletedCount?: number;
   onOpenDeletedProducts?: () => void;
-  onSyncAi?: () => void;
-  isSyncingAi?: boolean;
   cartCount?: number;
   isCartOnly?: boolean;
   onToggleCartOnly?: () => void;
@@ -38,8 +36,6 @@ export function SearchAndFilter({
   canEdit,
   deletedCount = 0,
   onOpenDeletedProducts,
-  onSyncAi,
-  isSyncingAi = false,
   cartCount = 0,
   isCartOnly = false,
   onToggleCartOnly,
@@ -210,20 +206,6 @@ export function SearchAndFilter({
               title="Xem danh sách các sản phẩm đã xóa mềm"
             >
               🗑️ Đã xóa ({deletedCount})
-            </button>
-          )}
-
-          {/* Nút đồng bộ vector có kiểm soát dành cho người có quyền can_edit */}
-          {canEdit && onSyncAi && (
-            <button
-              type="button"
-              id="btn-sync-ai"
-              className={`category-pill sync-ai-pill ${isSyncingAi ? 'is-syncing' : ''}`}
-              onClick={onSyncAi}
-              disabled={isSyncingAi}
-              title="Đồng bộ đặc trưng hình ảnh cho sản phẩm trong kho"
-            >
-              {isSyncingAi ? '⏳ Đang đồng bộ...' : '🔄 Đồng bộ đặc trưng ảnh'}
             </button>
           )}
         </div>
