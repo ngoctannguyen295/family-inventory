@@ -316,7 +316,7 @@ export function buildGeminiThinkingConfig(
     return { thinkingBudget: 0 };
   }
 
-  if (model.includes('3')) {
+  if (model.includes('3.6') || model.includes('3.5') || model.includes('3-')) {
     return { thinkingLevel: 'MINIMAL' };
   }
 
@@ -325,7 +325,7 @@ export function buildGeminiThinkingConfig(
 
 /**
  * Gửi ảnh sang Google Gemini API để phân tích thông tin bao bì.
- * Sử dụng header x-goog-api-key (không để lộ API key trên query string), timeout 20s cho toàn bộ request & body.
+ * Sử dụng header x-goog-api-key (không để lộ API key trên query string), timeout 25s cho toàn bộ request & body.
  */
 export async function analyzeProductImage(
   base64Image: string,
@@ -333,15 +333,12 @@ export async function analyzeProductImage(
 ): Promise<GeminiAnalysisResult> {
   const startTime = performance.now();
   const apiKey = Deno.env.get('GEMINI_API_KEY');
-  const primaryModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3.8-flash';
+  const primaryModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3.6-flash';
   // Các model dự phòng theo thứ tự ưu tiên khi model chính bị quá tải (503 / 429)
   const candidateModels = [
     primaryModel,
-    'gemini-3.8-flash',
     'gemini-3.6-flash',
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
+    'gemini-3.5-flash',
   ].filter((m, idx, arr) => arr.indexOf(m) === idx);
 
   let lastErrorResult: GeminiAnalysisResult | null = null;
@@ -494,6 +491,11 @@ export async function analyzeProductImage(
           error: isTemporaryOverload ? 'gemini_high_demand' : 'gemini_api_error',
           message: friendlyMsg,
         };
+
+        // Nếu không phải lỗi quá tải tạm thời, không duyệt tiếp các model khác để tránh phát sinh lỗi dây chuyền
+        if (!isTemporaryOverload) {
+          return lastErrorResult;
+        }
         continue;
       }
 
