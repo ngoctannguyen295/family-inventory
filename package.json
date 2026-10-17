@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "test": "node --experimental-strip-types --test src/utils/barcodeScannerController.test.ts src/services/aiSearchService.test.ts",
     "test:scanner": "node --experimental-strip-types --test src/utils/barcodeScannerController.test.ts",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name family-inventory --branch main"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
