@@ -233,14 +233,42 @@ export function detectProductTypeConflict(
 }
 
 /**
- * Chuẩn hóa chuỗi văn bản: không dấu, bỏ ký tự đặc biệt, đưa về chữ thường
+ * Danh sách ánh xạ từ đồng nghĩa ngôn ngữ/vùng miền phổ biến
+ */
+export const SYNONYM_RULES: [RegExp, string][] = [
+  // Củ sạc, cục sạc, đầu sạc
+  [/\b(cuc sac|cu sac|dau sac)\b/gi, 'cu sac'],
+  // Cáp sạc, dây sạc, dây cáp
+  [/\b(day sac|day cap|cap sac)\b/gi, 'cap sac'],
+  // Sạc dự phòng, pin dự phòng, pin sạc dự phòng
+  [/\b(pin du phong|pin sac du phong|sac du phong)\b/gi, 'sac du phong'],
+  // Nước rửa chén, nước rửa bát
+  [/\b(nuoc rua bat|nuoc rua chen)\b/gi, 'nuoc rua chen'],
+  // Mì gói, mì tôm
+  [/\b(mi tom|mi goi)\b/gi, 'mi goi'],
+  // Nước lau sàn, nước lau nhà
+  [/\b(nuoc lau nha|nuoc lau san)\b/gi, 'nuoc lau san'],
+];
+
+export function applySynonyms(text: string): string {
+  if (!text) return '';
+  let result = text;
+  for (const [pattern, canonical] of SYNONYM_RULES) {
+    result = result.replace(pattern, canonical);
+  }
+  return result;
+}
+
+/**
+ * Chuẩn hóa chuỗi văn bản: không dấu, bỏ ký tự đặc biệt, đưa về chữ thường và đồng bộ từ đồng nghĩa
  */
 export function normalizeCleanText(str: string): string {
   if (!str) return '';
-  return removeVietnameseTones(str)
+  const cleaned = removeVietnameseTones(str)
     .replace(/[^a-z0-9\s]/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+  return applySynonyms(cleaned);
 }
 
 /**

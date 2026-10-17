@@ -579,6 +579,10 @@ export function App() {
     setIsBarcodeScannerOpen(false);
     imageSearchTriggerRef.current = triggerEl;
     setIsImageSearchOpen(true);
+    // Tự động kích hoạt đồng bộ vector ngầm cho các sản phẩm còn pending trong kho
+    import('./services/aiSearchService')
+      .then(({ syncBatchEmbeddings }) => syncBatchEmbeddings())
+      .catch((err) => console.warn('[AUTO_SYNC_VECTOR_OPEN_WARN]', err));
   }, []);
 
   // Đóng modal Tìm bằng ảnh
@@ -650,6 +654,13 @@ export function App() {
           text: `Đã ${isEdit ? 'cập nhật' : 'thêm'} "${savedProduct.name}" thành công.`,
           type: 'success',
         });
+      }
+
+      // Tự động kích hoạt đồng bộ vector ngầm cho sản phẩm có ảnh vừa thêm/sửa
+      if (savedProduct.imageUrl) {
+        import('./services/aiSearchService')
+          .then(({ syncBatchEmbeddings }) => syncBatchEmbeddings())
+          .catch((err) => console.warn('[AUTO_SYNC_VECTOR_SAVE_WARN]', err));
       }
     },
     [searchTerm, selectedCategory, showToast]
