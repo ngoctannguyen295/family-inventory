@@ -155,7 +155,8 @@ export function CheckoutPage({
           <div className="pos-title-group">
             <h1 className="pos-page-title">
               <span className="pos-title-icon" aria-hidden="true">🧮</span>
-              <span>Bán hàng & Tính tiền</span>
+              <span className="pos-title-full">Bán hàng & Tính tiền</span>
+              <span className="pos-title-short">Bán hàng</span>
             </h1>
             {totalQuantity > 0 && (
               <span className="pos-total-badge">
