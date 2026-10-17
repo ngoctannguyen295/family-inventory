@@ -29,9 +29,7 @@ const ImageSearchModal = lazy(() =>
 const VisualSearchTestModal = lazy(() =>
   import('./components/VisualSearchTestModal').then((m) => ({ default: m.VisualSearchTestModal }))
 );
-const CheckoutModal = lazy(() =>
-  import('./components/CheckoutModal').then((m) => ({ default: m.CheckoutModal }))
-);
+import { CheckoutPage } from './components/CheckoutPage';
 import { QuantityInputModal } from './components/QuantityInputModal';
 import type { CartItem } from './types/checkout';
 import { UserProfilePage } from './components/UserProfilePage';
@@ -150,8 +148,8 @@ export function App() {
     return false;
   });
 
-  // 5.8 Quản lý điều hướng màn hình (Kho hàng vs Chỉnh sửa hồ sơ cá nhân)
-  const [currentView, setCurrentView] = useState<'inventory' | 'profile'>('inventory');
+  // 5.8 Quản lý điều hướng màn hình (Kho hàng vs Hồ sơ cá nhân vs Máy tính tiền riêng)
+  const [currentView, setCurrentView] = useState<'inventory' | 'profile' | 'pos'>('inventory');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // 5.9 Quản lý đơn tính tiền / giỏ hàng
@@ -166,7 +164,6 @@ export function App() {
     }
     return [];
   });
-  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const isCheckoutScanningRef = useRef(false);
   const [selectedQtyProduct, setSelectedQtyProduct] = useState<Product | null>(null);
@@ -628,7 +625,10 @@ export function App() {
       text: `Đã thêm "${product.name}" vào đơn tính tiền.`,
       type: 'success',
       actionLabel: 'Xem đơn',
-      onAction: () => setIsCheckoutModalOpen(true),
+      onAction: () => {
+        setCurrentView('pos');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      },
     });
   }, [showToast]);
 
@@ -682,7 +682,6 @@ export function App() {
       const totalAmount = items.reduce((sum, i) => sum + i.quantity * i.salePrice, 0);
 
       setCartItems([]);
-      setIsCheckoutModalOpen(false);
 
       showToast({
         text: `✅ Đã bán ${totalQty} sản phẩm (Tổng: ${formatCurrency(totalAmount)}) và trừ kho thành công!`,
@@ -757,6 +756,12 @@ export function App() {
   // Quay lại trang danh mục kho hàng
   const handleBackToInventory = useCallback(() => {
     setCurrentView('inventory');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  // Chuyển sang trang Bán hàng & Tính tiền riêng biệt
+  const handleOpenPos = useCallback(() => {
+    setCurrentView('pos');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
@@ -1059,7 +1064,7 @@ export function App() {
         onOpenImageSearch={() => handleOpenImageSearch(addBtnRef.current || document.body)}
         onOpenBarcodeScanner={() => handleOpenBarcodeScanner(addBtnRef.current || document.body)}
         onOpenTrash={() => setIsDeletedModalOpen(true)}
-        onOpenCheckout={() => setIsCheckoutModalOpen(true)}
+        onOpenCheckout={handleOpenPos}
         cartCount={cartCount}
         onSignOut={handleSignOut}
         isSigningOut={isSigningOut}
@@ -1089,7 +1094,7 @@ export function App() {
             <button
               type="button"
               className="mobile-bar-action-btn"
-              onClick={() => setIsCheckoutModalOpen(true)}
+              onClick={handleOpenPos}
               title="Máy tính tiền / Bán hàng"
               aria-label={`Mở máy tính tiền, ${cartCount} sản phẩm`}
               style={{ position: 'relative' }}
@@ -1151,6 +1156,26 @@ export function App() {
             isSigningOut={isSigningOut}
             onShowToast={showToast}
           />
+        ) : currentView === 'pos' ? (
+          <CheckoutPage
+            products={products}
+            categories={categories}
+            cartItems={cartItems}
+            onAddToCart={handleAddToCart}
+            onUpdateQuantity={handleUpdateCartQuantity}
+            onRemoveItem={handleRemoveFromCart}
+            onClearCart={handleClearCart}
+            onConfirmCheckout={handleConfirmCheckout}
+            isCheckingOut={isCheckingOut}
+            canEdit={canEdit}
+            onBackToInventory={handleBackToInventory}
+            onOpenBarcodeScanner={() => {
+              isCheckoutScanningRef.current = true;
+              setIsBarcodeScannerOpen(true);
+            }}
+            onOpenQuantityInput={handleOpenQuantityInput}
+            onShowToast={(msg, type) => showToast({ text: msg, type })}
+          />
         ) : (
           <div className="app-content">
             <Header
@@ -1163,7 +1188,7 @@ export function App() {
               onOpenProfile={handleOpenProfile}
               onToggleMobileMenu={() => setIsMobileMenuOpen((prev) => !prev)}
               cartCount={cartCount}
-              onOpenCheckout={() => setIsCheckoutModalOpen(true)}
+              onOpenCheckout={handleOpenPos}
             />
 
         {/* Thông báo lỗi khi đăng xuất thất bại */}
@@ -1432,20 +1457,20 @@ export function App() {
         </Suspense>
       )}
 
-      {/* Thanh Giỏ hàng / Tính tiền nổi dưới màn hình khi có sản phẩm được chọn */}
-      {cartItems.length > 0 && !isCheckoutModalOpen && (
+      {/* Thanh Giỏ hàng nổi dưới màn hình khi đang ở trang Kho hàng và có sản phẩm được chọn */}
+      {cartItems.length > 0 && currentView === 'inventory' && (
         <div
           className="floating-cart-bar"
-          onClick={() => setIsCheckoutModalOpen(true)}
+          onClick={handleOpenPos}
           role="button"
           tabIndex={0}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
-              setIsCheckoutModalOpen(true);
+              handleOpenPos();
             }
           }}
-          aria-label={`Mở đơn tính tiền gồm ${cartCount} sản phẩm, tổng ${formatCurrency(cartTotalAmount)}`}
+          aria-label={`Mở trang tính tiền gồm ${cartCount} sản phẩm, tổng ${formatCurrency(cartTotalAmount)}`}
         >
           <div className="floating-cart-left">
             <div className="floating-cart-icon-box">
@@ -1463,31 +1488,6 @@ export function App() {
             <span>Tính tiền ❯</span>
           </div>
         </div>
-      )}
-
-      {/* Modal Máy tính tiền / Bán hàng */}
-      {isCheckoutModalOpen && (
-        <Suspense fallback={null}>
-          <CheckoutModal
-            isOpen={isCheckoutModalOpen}
-            onClose={() => setIsCheckoutModalOpen(false)}
-            cartItems={cartItems}
-            allProducts={products}
-            onAddToCart={handleAddToCart}
-            onUpdateQuantity={handleUpdateCartQuantity}
-            onRemoveItem={handleRemoveFromCart}
-            onClearCart={handleClearCart}
-            onConfirmCheckout={handleConfirmCheckout}
-            isCheckingOut={isCheckingOut}
-            canEdit={canEdit}
-            onOpenBarcodeScanner={() => {
-              isCheckoutScanningRef.current = true;
-              setIsBarcodeScannerOpen(true);
-            }}
-            onShowToast={(msg, type) => showToast({ text: msg, type })}
-            onOpenQuantityInput={handleOpenQuantityInput}
-          />
-        </Suspense>
       )}
 
       {/* Modal nhập trực tiếp số lượng cụ thể (1, 5, 10, 20... hoặc gõ tự do) */}

@@ -1,0 +1,1070 @@
+/* ==========================================================================
+   CheckoutPage (Trang Tính Tiền & Bán Hàng Riêng Biệt - Dedicated POS Page)
+   ========================================================================== */
+
+.pos-page-container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  gap: 12px;
+  box-sizing: border-box;
+}
+
+@media (min-width: 768px) {
+  .pos-page-container {
+    padding: 20px 24px;
+    gap: 16px;
+  }
+}
+
+/* 1. Header Trang Bán Hàng */
+.pos-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 12px 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.pos-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pos-back-btn {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+
+.pos-back-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.pos-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pos-page-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #082f49;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pos-title-icon {
+  font-size: 20px;
+}
+
+.pos-total-badge {
+  background: #0284c7;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.btn-pos-clear {
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-pos-clear:hover {
+  background: #fecaca;
+}
+
+.btn-pos-clear.confirming {
+  background: #dc2626;
+  color: #ffffff;
+  border-color: #b91c1c;
+}
+
+/* 2. Mobile Tabs Switcher */
+.pos-mobile-tabs {
+  display: flex;
+  background: #e2e8f0;
+  padding: 4px;
+  border-radius: 12px;
+  gap: 4px;
+}
+
+@media (min-width: 900px) {
+  .pos-mobile-tabs {
+    display: none; /* Desktop hiển thị cả 2 cột cùng lúc */
+  }
+}
+
+.pos-tab-btn {
+  flex: 1;
+  height: 40px;
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+
+.pos-tab-btn.is-active {
+  background: #ffffff;
+  color: #0284c7;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.pos-tab-counter {
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 9999px;
+}
+
+/* 3. Main Layout: 2 Columns on Desktop */
+.pos-main-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+}
+
+@media (min-width: 900px) {
+  .pos-main-layout {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    align-items: flex-start;
+  }
+}
+
+@media (min-width: 1100px) {
+  .pos-main-layout {
+    grid-template-columns: 1fr 420px;
+  }
+}
+
+/* Ẩn hiện tab trên di động */
+@media (max-width: 899px) {
+  .mobile-hidden {
+    display: none !important;
+  }
+  .mobile-visible {
+    display: flex !important;
+  }
+}
+
+/* 4. Cột Chọn Hàng (Catalog Column) */
+.pos-catalog-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pos-search-bar {
+  display: flex;
+  gap: 8px;
+}
+
+.pos-search-input-wrap {
+  position: relative;
+  flex: 1;
+}
+
+.pos-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 15px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.pos-search-input {
+  width: 100%;
+  height: 44px;
+  padding: 0 36px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #0f172a;
+  background: #ffffff;
+  outline: none;
+  box-sizing: border-box;
+  transition: all 0.15s;
+}
+
+.pos-search-input:focus {
+  border-color: #0284c7;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+}
+
+.pos-search-clear-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 16px;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pos-barcode-btn {
+  height: 44px;
+  padding: 0 14px;
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1.5px solid #bae6fd;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.pos-barcode-btn:hover {
+  background: #bae6fd;
+}
+
+/* Category pills */
+.pos-category-scroll {
+  display: flex;
+  overflow-x: auto;
+  gap: 8px;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pos-category-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.pos-category-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.pos-cat-pill {
+  padding: 6px 14px;
+  border-radius: 9999px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.pos-cat-pill:hover {
+  background: #f1f5f9;
+}
+
+.pos-cat-pill.is-active {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #0284c7;
+}
+
+/* Product Grid for fast selling */
+.pos-product-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+@media (min-width: 640px) {
+  .pos-product-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+}
+
+@media (min-width: 1000px) {
+  .pos-product-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.pos-product-card {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.15s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.pos-product-card.in-cart {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.pos-product-card.is-out-of-stock {
+  opacity: 0.65;
+}
+
+.pos-card-media {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  background: #f8fafc;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pos-card-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pos-out-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.pos-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pos-card-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pos-card-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.pos-card-price {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0284c7;
+}
+
+.pos-card-stock {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.pos-card-actions {
+  margin-top: 4px;
+}
+
+.btn-pos-add {
+  width: 100%;
+  height: 36px;
+  background: #f0fdf4;
+  color: #166534;
+  border: 1.5px solid #86efac;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+
+.btn-pos-add:hover:not(:disabled) {
+  background: #dcfce7;
+}
+
+.btn-pos-add:disabled {
+  background: #f1f5f9;
+  color: #94a3b8;
+  border-color: #e2e8f0;
+  cursor: not-allowed;
+}
+
+/* Stepper on Card */
+.pos-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  background: #ffffff;
+  border: 1.5px solid #86efac;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pos-stepper-btn {
+  width: 34px;
+  height: 100%;
+  background: #dcfce7;
+  border: none;
+  color: #15803d;
+  font-size: 18px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.pos-stepper-btn:active {
+  background: #bbf7d0;
+}
+
+.pos-stepper-btn:disabled {
+  background: #f1f5f9;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.pos-stepper-qty-btn {
+  flex: 1;
+  height: 100%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0 4px;
+}
+
+.pos-stepper-num {
+  font-size: 14px;
+  font-weight: 800;
+  color: #166534;
+}
+
+.pos-stepper-unit {
+  font-size: 10px;
+  font-weight: 600;
+  color: #15803d;
+  max-width: 40px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Floating bottom bar on mobile catalog tab */
+.pos-floating-summary-bar {
+  position: fixed;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 24px);
+  max-width: 500px;
+  background: #082f49;
+  color: #ffffff;
+  border-radius: 14px;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 10px 25px rgba(8, 47, 73, 0.45);
+  z-index: 500;
+  cursor: pointer;
+}
+
+@media (min-width: 900px) {
+  .pos-floating-summary-bar {
+    display: none;
+  }
+}
+
+.pos-floating-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pos-floating-icon {
+  font-size: 22px;
+}
+
+.pos-floating-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.pos-floating-count {
+  font-size: 11px;
+  color: #bae6fd;
+}
+
+.pos-floating-total {
+  font-size: 16px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.pos-floating-right {
+  background: #16a34a;
+  color: #ffffff;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* 5. Cột Hóa Đơn & Thanh Toán (Receipt Column) */
+.pos-receipt-column {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 900px) {
+  .pos-receipt-column {
+    position: sticky;
+    top: 20px;
+  }
+}
+
+.pos-receipt-card {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.pos-receipt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.receipt-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.receipt-icon {
+  font-size: 18px;
+}
+
+.receipt-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.btn-pos-add-more {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+@media (min-width: 900px) {
+  .btn-pos-add-more {
+    display: none;
+  }
+}
+
+.pos-receipt-body {
+  padding: 12px 14px;
+  max-height: 400px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@media (min-width: 900px) {
+  .pos-receipt-body {
+    max-height: calc(100vh - 360px);
+  }
+}
+
+/* Empty receipt state */
+.pos-empty-receipt {
+  text-align: center;
+  padding: 32px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+}
+
+.empty-cart-icon {
+  font-size: 44px;
+}
+
+.empty-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.empty-desc {
+  font-size: 13px;
+  max-width: 280px;
+  margin: 0;
+}
+
+.btn-go-to-catalog {
+  background: #0284c7;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 6px;
+}
+
+/* Cart item in receipt */
+.pos-cart-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pos-cart-item {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pos-cart-item.has-stock-warning {
+  border-color: #fca5a5;
+  background: #fff5f5;
+}
+
+.cart-item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cart-item-thumb-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f1f5f9;
+  flex-shrink: 0;
+}
+
+.cart-item-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cart-item-details {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cart-item-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cart-item-sub {
+  font-size: 11px;
+  color: #64748b;
+  display: flex;
+  gap: 4px;
+}
+
+.btn-cart-remove {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 16px;
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.btn-cart-remove:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.cart-stock-warning {
+  background: #fee2e2;
+  color: #dc2626;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.cart-item-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px dashed #f1f5f9;
+  padding-top: 6px;
+}
+
+.pos-item-stepper {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.pos-item-qty-btn {
+  background: #ffffff;
+  border: none;
+  border-left: 1px solid #e2e8f0;
+  border-right: 1px solid #e2e8f0;
+  padding: 0 8px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.pos-item-qty-val {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.pos-item-unit-val {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.pos-item-edit-icon {
+  font-size: 9px;
+  opacity: 0.5;
+}
+
+.cart-item-subtotal {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+}
+
+.subtotal-formula {
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.subtotal-amount {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0284c7;
+}
+
+/* Receipt Summary & Actions */
+.pos-receipt-summary {
+  padding: 12px 14px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.summary-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #475569;
+}
+
+.summary-line.grand-total-line {
+  border-top: 1.5px solid #cbd5e1;
+  padding-top: 8px;
+}
+
+.grand-label {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.grand-val {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0284c7;
+}
+
+/* Cash Calculator Box */
+.pos-cash-calc-box {
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 8px;
+}
+
+.cash-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.btn-pos-toggle-cash {
+  background: none;
+  border: none;
+  color: #0369a1;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+}
+
+.pos-arrow {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.btn-pos-clear-cash {
+  background: none;
+  border: none;
+  color: #dc2626;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.pos-cash-fields {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.cash-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cash-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.pos-cash-input {
+  flex: 1;
+  height: 34px;
+  padding: 0 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  outline: none;
+}
+
+.cash-preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pos-cash-chip {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.change-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.change-box.success {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+}
+
+.change-num {
+  font-size: 14px;
+  font-weight: 800;
+  color: #16a34a;
+}
+
+.change-box.warning {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.missing-num {
+  font-size: 13px;
+  font-weight: 800;
+  color: #dc2626;
+}
+
+/* Action Buttons */
+.pos-action-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.btn-pos-copy-receipt {
+  flex: 1;
+  height: 44px;
+  background: #f8fafc;
+  color: #334155;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.btn-pos-copy-receipt:hover {
+  background: #f1f5f9;
+}
+
+.btn-pos-checkout-confirm {
+  flex: 2;
+  height: 44px;
+  background: #16a34a;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3);
+}
+
+.btn-pos-checkout-confirm:hover:not(:disabled) {
+  background: #15803d;
+}
+
+.btn-pos-checkout-confirm:disabled {
+  background: #94a3b8;
+  cursor: not-allowed;
+  box-shadow: none;
+}

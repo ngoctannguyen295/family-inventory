@@ -3,7 +3,7 @@ import type { FamilyMember } from '../types/database';
 import './Sidebar.css';
 
 interface SidebarProps {
-  currentView: 'inventory' | 'profile';
+  currentView: 'inventory' | 'profile' | 'pos';
   totalProducts: number;
   deletedCount: number;
   member: FamilyMember | null;
@@ -133,7 +133,7 @@ export function Sidebar({
             {/* Mục: Tính tiền / Bán hàng */}
             <button
               type="button"
-              className="sidebar-nav-item"
+              className={`sidebar-nav-item ${currentView === 'pos' ? 'active' : ''}`}
               onClick={() => handleNavClick(onOpenCheckout)}
               title="Mở máy tính tiền, tạo đơn bán và trừ tồn kho"
             >
