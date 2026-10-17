@@ -8,6 +8,8 @@ interface ProductCardProps {
   onClick: (product: Product, triggerEl: HTMLElement) => void;
   cartQuantity?: number;
   onAddToCart?: (product: Product) => void;
+  onUpdateQuantity?: (productId: string, quantity: number) => void;
+  onOpenQuantityInput?: (product: Product) => void;
 }
 
 export function ProductCard({
@@ -15,6 +17,8 @@ export function ProductCard({
   onClick,
   cartQuantity = 0,
   onAddToCart,
+  onUpdateQuantity,
+  onOpenQuantityInput,
 }: ProductCardProps) {
   const cardRef = useRef<HTMLElement>(null);
   const isOutOfStock = product.stock <= 0;
@@ -99,23 +103,56 @@ export function ProductCard({
         </div>
 
         {onAddToCart && (
-          <div className="product-card-actions">
-            <button
-              type="button"
-              className={`btn-add-to-cart ${cartQuantity > 0 ? 'in-cart' : ''}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onAddToCart(product);
-              }}
-              disabled={isOutOfStock}
-              title={isOutOfStock ? 'Sản phẩm đã hết hàng' : 'Thêm vào đơn tính tiền'}
-              aria-label={`Thêm ${product.name} vào đơn tính tiền`}
-            >
-              <span>🛒</span>
-              <span>
-                {cartQuantity > 0 ? `+1 (Đã chọn: ${cartQuantity})` : '+ Tính tiền'}
-              </span>
-            </button>
+          <div className="product-card-actions" onClick={(e) => e.stopPropagation()}>
+            {cartQuantity > 0 ? (
+              <div className="card-stepper">
+                <button
+                  type="button"
+                  className="card-stepper-btn minus"
+                  onClick={() => onUpdateQuantity?.(product.id, cartQuantity - 1)}
+                  title="Giảm 1"
+                  aria-label={`Giảm số lượng ${product.name}`}
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  className="card-stepper-qty-btn"
+                  onClick={() => onOpenQuantityInput?.(product)}
+                  title="Bấm để gõ số lượng cụ thể"
+                  aria-label={`Số lượng hiện tại ${cartQuantity}. Bấm để nhập số khác`}
+                >
+                  <span className="stepper-num">{cartQuantity}</span>
+                  <span className="stepper-unit">{product.unit}</span>
+                </button>
+                <button
+                  type="button"
+                  className="card-stepper-btn plus"
+                  onClick={() => onUpdateQuantity?.(product.id, cartQuantity + 1)}
+                  disabled={product.stock > 0 && cartQuantity >= product.stock}
+                  title={
+                    product.stock > 0 && cartQuantity >= product.stock
+                      ? 'Đã đạt giới hạn tồn kho'
+                      : 'Tăng 1'
+                  }
+                  aria-label={`Tăng số lượng ${product.name}`}
+                >
+                  +
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="btn-add-to-cart"
+                onClick={() => onAddToCart(product)}
+                disabled={isOutOfStock}
+                title={isOutOfStock ? 'Sản phẩm đã hết hàng' : 'Chọn bán mặt hàng này'}
+                aria-label={`Thêm ${product.name} vào đơn tính tiền`}
+              >
+                <span>＋</span>
+                <span>{isOutOfStock ? 'Hết hàng' : 'Bán hàng'}</span>
+              </button>
+            )}
           </div>
         )}
       </div>

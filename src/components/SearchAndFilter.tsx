@@ -18,6 +18,9 @@ interface SearchAndFilterProps {
   onOpenDeletedProducts?: () => void;
   onSyncAi?: () => void;
   isSyncingAi?: boolean;
+  cartCount?: number;
+  isCartOnly?: boolean;
+  onToggleCartOnly?: () => void;
 }
 
 export function SearchAndFilter({
@@ -37,6 +40,9 @@ export function SearchAndFilter({
   onOpenDeletedProducts,
   onSyncAi,
   isSyncingAi = false,
+  cartCount = 0,
+  isCartOnly = false,
+  onToggleCartOnly,
 }: SearchAndFilterProps) {
   const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     onSearchChange(e.target.value);
@@ -158,11 +164,31 @@ export function SearchAndFilter({
         <div className="category-pills-container">
           <button
             type="button"
-            className={`category-pill ${selectedCategory === 'ALL' ? 'is-active' : ''}`}
-            onClick={() => onCategoryChange('ALL')}
+            className={`category-pill ${selectedCategory === 'ALL' && !isCartOnly ? 'is-active' : ''}`}
+            onClick={() => {
+              if (isCartOnly && onToggleCartOnly) onToggleCartOnly();
+              onCategoryChange('ALL');
+            }}
           >
             Tất cả ({totalCount})
           </button>
+
+          {cartCount > 0 && onToggleCartOnly && (
+            <button
+              type="button"
+              className={`category-pill cart-filter-pill ${isCartOnly ? 'is-active' : ''}`}
+              onClick={onToggleCartOnly}
+              title="Chỉ hiển thị các mặt hàng đang có trong đơn tính tiền"
+              style={{
+                background: isCartOnly ? '#16a34a' : '#ecfdf5',
+                color: isCartOnly ? '#ffffff' : '#065f46',
+                borderColor: '#86efac',
+                fontWeight: 700,
+              }}
+            >
+              🛒 Đang chọn ({cartCount})
+            </button>
+          )}
 
           {categories.map((cat) => (
             <button

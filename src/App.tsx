@@ -32,6 +32,7 @@ const VisualSearchTestModal = lazy(() =>
 const CheckoutModal = lazy(() =>
   import('./components/CheckoutModal').then((m) => ({ default: m.CheckoutModal }))
 );
+import { QuantityInputModal } from './components/QuantityInputModal';
 import type { CartItem } from './types/checkout';
 import { UserProfilePage } from './components/UserProfilePage';
 import { Sidebar } from './components/Sidebar';
@@ -83,6 +84,7 @@ export function App() {
   // 4. Quản lý bộ lọc, tìm kiếm & sắp xếp
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [isCartOnlyFilter, setIsCartOnlyFilter] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>(() => {
     try {
       const saved = localStorage.getItem('family_inventory_sort_by');
@@ -167,15 +169,19 @@ export function App() {
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const isCheckoutScanningRef = useRef(false);
+  const [selectedQtyProduct, setSelectedQtyProduct] = useState<Product | null>(null);
 
-  // Tự động lưu giỏ hàng vào localStorage
+  // Tự động lưu giỏ hàng vào localStorage và reset filter nếu giỏ trống
   useEffect(() => {
     try {
       localStorage.setItem('family_inventory_cart', JSON.stringify(cartItems));
     } catch {
       // Bỏ qua lỗi ghi localStorage
     }
-  }, [cartItems]);
+    if (cartItems.length === 0 && isCartOnlyFilter) {
+      setIsCartOnlyFilter(false);
+    }
+  }, [cartItems, isCartOnlyFilter]);
 
   // 6. Thông báo Toast
   const [toast, setToast] = useState<ToastNotification | null>(null);
@@ -635,6 +641,10 @@ export function App() {
     });
   }, []);
 
+  const handleOpenQuantityInput = useCallback((product: Product) => {
+    setSelectedQtyProduct(product);
+  }, []);
+
   const handleRemoveFromCart = useCallback((productId: string) => {
     setCartItems((prev) => prev.filter((i) => i.productId !== productId));
   }, []);
@@ -818,6 +828,11 @@ export function App() {
     const normalizedQuery = removeVietnameseTones(rawSearch);
 
     const filtered = products.filter((product) => {
+      // 0. Nếu đang lọc xem các món đang bán trong đơn
+      if (isCartOnlyFilter && !cartQuantities[product.id]) {
+        return false;
+      }
+
       // 1. Kiểm tra danh mục
       if (selectedCategory !== 'ALL' && product.category !== selectedCategory) {
         return false;
@@ -888,13 +903,14 @@ export function App() {
     });
 
     return sorted;
-  }, [products, searchTerm, selectedCategory, sortBy]);
+  }, [products, searchTerm, selectedCategory, isCartOnlyFilter, cartQuantities, sortBy]);
 
-  const hasFiltersApplied = searchTerm.trim() !== '' || selectedCategory !== 'ALL';
+  const hasFiltersApplied = searchTerm.trim() !== '' || selectedCategory !== 'ALL' || isCartOnlyFilter;
 
   const handleResetFilters = useCallback(() => {
     setSearchTerm('');
     setSelectedCategory('ALL');
+    setIsCartOnlyFilter(false);
   }, []);
 
   // Quyền chỉnh sửa của người dùng
@@ -1244,6 +1260,9 @@ export function App() {
                   onOpenDeletedProducts={handleOpenDeletedProductsModal}
                   onSyncAi={handleSyncAi}
                   isSyncingAi={isSyncingAi}
+                  cartCount={cartCount}
+                  isCartOnly={isCartOnlyFilter}
+                  onToggleCartOnly={() => setIsCartOnlyFilter((prev) => !prev)}
                 />
               )}
 
@@ -1260,6 +1279,8 @@ export function App() {
                 onOpenAddModal={handleOpenAddModal}
                 cartQuantities={cartQuantities}
                 onAddToCart={handleAddToCart}
+                onUpdateQuantity={handleUpdateCartQuantity}
+                onOpenQuantityInput={handleOpenQuantityInput}
               />
             </>
           )}
@@ -1464,8 +1485,23 @@ export function App() {
               setIsBarcodeScannerOpen(true);
             }}
             onShowToast={(msg, type) => showToast({ text: msg, type })}
+            onOpenQuantityInput={handleOpenQuantityInput}
           />
         </Suspense>
+      )}
+
+      {/* Modal nhập trực tiếp số lượng cụ thể (1, 5, 10, 20... hoặc gõ tự do) */}
+      {selectedQtyProduct && (
+        <QuantityInputModal
+          isOpen={Boolean(selectedQtyProduct)}
+          product={selectedQtyProduct}
+          currentQuantity={cartQuantities[selectedQtyProduct.id] || 0}
+          onClose={() => setSelectedQtyProduct(null)}
+          onConfirm={(productId, newQty) => {
+            handleUpdateCartQuantity(productId, newQty);
+            setSelectedQtyProduct(null);
+          }}
+        />
       )}
 
       {/* Hộp thoại thông báo cập nhật phiên bản mới PWA (registerType: 'prompt') */}

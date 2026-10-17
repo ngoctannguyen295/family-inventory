@@ -13,6 +13,8 @@ interface ProductListProps {
   onOpenAddModal?: () => void;
   cartQuantities?: Record<string, number>;
   onAddToCart?: (product: Product) => void;
+  onUpdateQuantity?: (productId: string, quantity: number) => void;
+  onOpenQuantityInput?: (product: Product) => void;
 }
 
 export function ProductList({
@@ -27,6 +29,8 @@ export function ProductList({
   onOpenAddModal,
   cartQuantities = {},
   onAddToCart,
+  onUpdateQuantity,
+  onOpenQuantityInput,
 }: ProductListProps) {
   // Trường hợp cơ sở dữ liệu hoàn toàn chưa có sản phẩm nào
   if (totalInDatabase === 0) {
@@ -211,6 +215,8 @@ export function ProductList({
           onClick={onSelectProduct}
           cartQuantity={cartQuantities[product.id] || 0}
           onAddToCart={onAddToCart}
+          onUpdateQuantity={onUpdateQuantity}
+          onOpenQuantityInput={onOpenQuantityInput}
         />
       ))}
     </div>

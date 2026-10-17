@@ -20,6 +20,7 @@ interface CheckoutModalProps {
   canEdit: boolean;
   onOpenBarcodeScanner?: () => void;
   onShowToast: (message: string, type: 'success' | 'info' | 'warning') => void;
+  onOpenQuantityInput?: (product: Product) => void;
 }
 
 export function CheckoutModal({
@@ -36,13 +37,15 @@ export function CheckoutModal({
   canEdit,
   onOpenBarcodeScanner,
   onShowToast,
+  onOpenQuantityInput,
 }: CheckoutModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [cashGivenInput, setCashGivenInput] = useState<string>('');
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
+  const [showCashCalc, setShowCashCalc] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Focus tìm kiếm khi mở modal
+  // Reset confirmation state when modal opens
   useEffect(() => {
     if (isOpen) {
       setIsConfirmingReset(false);
@@ -85,14 +88,19 @@ export function CheckoutModal({
         const matchCategory = removeVietnameseTones(p.category.toLowerCase()).includes(norm);
         return matchName || matchCode || matchBarcode || matchCategory;
       })
-      .slice(0, 6);
+      .slice(0, 8);
   }, [searchTerm, allProducts]);
+
+  // Gợi ý sản phẩm còn hàng khi giỏ trống
+  const suggestedProducts = useMemo(() => {
+    return allProducts.filter((p) => p.stock > 0).slice(0, 6);
+  }, [allProducts]);
 
   // Sao chép hóa đơn gửi Zalo/tin nhắn
   const handleCopyReceipt = async () => {
     if (cartItems.length === 0) return;
 
-    const receipt = formatReceiptText(cartItems, parsedCashGiven);
+    const receipt = formatReceiptText(cartItems, parsedCashGiven > 0 ? parsedCashGiven : undefined);
 
     try {
       await navigator.clipboard.writeText(receipt);
@@ -145,13 +153,13 @@ export function CheckoutModal({
         {/* Header Modal */}
         <div className="checkout-header">
           <div className="checkout-header-left">
-            <span className="checkout-title-icon" aria-hidden="true">🧮</span>
+            <span className="checkout-title-icon" aria-hidden="true">🧾</span>
             <h2 id="checkout-modal-title" className="checkout-title">
-              Máy tính tiền / Bán hàng
+              Đơn bán hàng
             </h2>
             {cartItems.length > 0 && (
               <span className="checkout-count-badge">
-                {totalQuantity} món
+                {totalQuantity} món ({cartItems.length} loại)
               </span>
             )}
           </div>
@@ -162,15 +170,15 @@ export function CheckoutModal({
                 {isConfirmingReset ? (
                   <button
                     type="button"
-                    className="btn-clear-cart"
+                    className="btn-clear-cart confirming"
                     onClick={() => {
                       onClearCart();
                       setIsConfirmingReset(false);
-                      onShowToast('Đã làm trống giỏ hàng.', 'info');
+                      onShowToast('Đã làm trống đơn hàng.', 'info');
                     }}
-                    title="Xác nhận xóa hết đơn hiện tại"
+                    title="Bấm để xác nhận xóa sạch toàn bộ đơn"
                   >
-                    Chắc chắn xóa?
+                    Xác nhận xóa?
                   </button>
                 ) : (
                   <button
@@ -179,7 +187,7 @@ export function CheckoutModal({
                     onClick={() => setIsConfirmingReset(true)}
                     title="Xóa trắng giỏ tính tiền"
                   >
-                    Xóa hết
+                    Xóa đơn
                   </button>
                 )}
               </>
@@ -196,7 +204,7 @@ export function CheckoutModal({
           </div>
         </div>
 
-        {/* Thanh tìm kiếm & chọn thêm sản phẩm nhanh ngay trong modal */}
+        {/* Thanh tìm kiếm & thêm sản phẩm nhanh */}
         <div className="checkout-search-section">
           <div className="checkout-search-bar">
             <div className="checkout-search-input-wrap">
@@ -205,7 +213,7 @@ export function CheckoutModal({
                 ref={searchInputRef}
                 type="text"
                 className="checkout-search-input"
-                placeholder="Tìm tên, mã hàng, danh mục để thêm nhanh..."
+                placeholder="Tìm thêm sản phẩm vào đơn..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -229,7 +237,7 @@ export function CheckoutModal({
                 title="Quét mã vạch thêm vào đơn"
               >
                 <span>📷</span>
-                <span>Quét mã</span>
+                <span className="btn-scan-text">Quét mã</span>
               </button>
             )}
           </div>
@@ -256,12 +264,13 @@ export function CheckoutModal({
                     <div className="suggestion-text">
                       <span className="suggestion-name">{prod.name}</span>
                       <span className="suggestion-meta">
-                        <strong>{formatCurrency(prod.salePrice)}</strong> • Tồn: {prod.stock} {prod.unit}
+                        <strong className="suggestion-price">{formatCurrency(prod.salePrice)}</strong>
+                        <span>• Tồn: {prod.stock} {prod.unit}</span>
                       </span>
                     </div>
                   </div>
                   <button type="button" className="suggestion-add-btn">
-                    + Thêm
+                    ＋ Bán
                   </button>
                 </div>
               ))}
@@ -269,137 +278,173 @@ export function CheckoutModal({
           )}
         </div>
 
-        {/* Danh sách các sản phẩm đang có trong giỏ tính tiền */}
+        {/* Nội dung danh sách đơn hàng */}
         <div className="checkout-modal-body">
           {cartItems.length === 0 ? (
             <div className="checkout-empty-state">
               <span className="empty-cart-icon" aria-hidden="true">🛒</span>
-              <h3 className="empty-cart-title">Chưa có sản phẩm nào trong đơn</h3>
+              <h3 className="empty-cart-title">Đơn hàng đang trống</h3>
               <p className="empty-cart-desc">
-                Nhập tên sản phẩm ở ô tìm kiếm phía trên hoặc bấm nút <strong>"+ Tính tiền"</strong> ở từng sản phẩm trong kho hàng để thêm vào đơn.
+                Chọn sản phẩm từ danh mục kho hàng hoặc tìm kiếm nhanh để bắt đầu tính tiền.
               </p>
+
+              <button
+                type="button"
+                className="btn-back-to-catalog"
+                onClick={onClose}
+              >
+                👈 Chọn hàng từ danh sách kho
+              </button>
+
+              {/* Gợi ý một số món có sẵn để thêm ngay */}
+              {suggestedProducts.length > 0 && (
+                <div className="suggested-products-section">
+                  <span className="suggested-section-title">Hoặc bấm chọn nhanh các món có sẵn:</span>
+                  <div className="suggested-products-grid">
+                    {suggestedProducts.map((p) => (
+                      <div
+                        key={p.id}
+                        className="suggested-product-chip"
+                        onClick={() => {
+                          onAddToCart(p, 1);
+                          onShowToast(`Đã thêm "${p.name}" vào đơn.`, 'success');
+                        }}
+                      >
+                        <ProductImage
+                          storagePath={p.imageUrl}
+                          alt={p.name}
+                          className="suggested-chip-thumb"
+                        />
+                        <div className="suggested-chip-info">
+                          <span className="suggested-chip-name">{p.name}</span>
+                          <span className="suggested-chip-price">{formatCurrency(p.salePrice)}</span>
+                        </div>
+                        <button type="button" className="suggested-chip-add">
+                          ＋
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <>
-              {cartItems.map((item) => {
-                const isOverStock = item.quantity > item.product.stock;
-                const lineTotal = item.quantity * item.salePrice;
+              {/* Danh sách từng món hàng */}
+              <div className="cart-items-container">
+                {cartItems.map((item) => {
+                  const isOverStock = item.product.stock > 0 && item.quantity > item.product.stock;
+                  const lineTotal = item.quantity * item.salePrice;
 
-                return (
-                  <div
-                    key={item.productId}
-                    className={`checkout-item-card ${isOverStock ? 'has-stock-warning' : ''}`}
-                  >
-                    <div className="item-main-row">
-                      <div className="item-left">
-                        <div className="item-thumb-box">
-                          <ProductImage
-                            storagePath={item.product.imageUrl}
-                            alt={item.product.name}
-                            className="suggestion-thumb"
-                          />
+                  return (
+                    <div
+                      key={item.productId}
+                      className={`checkout-item-card ${isOverStock ? 'has-stock-warning' : ''}`}
+                    >
+                      <div className="item-main-row">
+                        <div className="item-left">
+                          <div className="item-thumb-box">
+                            <ProductImage
+                              storagePath={item.product.imageUrl}
+                              alt={item.product.name}
+                              className="suggestion-thumb"
+                            />
+                          </div>
+                          <div className="item-details">
+                            <span className="item-name" title={item.product.name}>
+                              {item.product.name}
+                            </span>
+                            <div className="item-sub-info">
+                              <span className="item-unit-price">
+                                {formatCurrency(item.salePrice)} / {item.product.unit}
+                              </span>
+                              <span className="item-stock-hint">
+                                (Kho: {item.product.stock})
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                        <div className="item-details">
-                          <span className="item-name" title={item.product.name}>
-                            {item.product.name}
-                          </span>
-                          <span className="item-code-unit">
-                            <code>{item.product.code}</code>
-                            <span className="item-unit-badge">{item.product.unit}</span>
-                          </span>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        className="btn-remove-item"
-                        onClick={() => onRemoveItem(item.productId)}
-                        title="Xóa khỏi đơn"
-                        aria-label={`Xóa ${item.product.name} khỏi đơn`}
-                      >
-                        ✕
-                      </button>
-                    </div>
-
-                    {/* Cảnh báo tồn kho nếu vượt quá */}
-                    {isOverStock && (
-                      <div className="item-stock-warning">
-                        <span>⚠️ Vượt quá tồn kho (Kho còn {item.product.stock} {item.product.unit})</span>
-                      </div>
-                    )}
-
-                    {/* Bộ chỉnh số lượng & Giá tiền */}
-                    <div className="item-control-row">
-                      <div className="quantity-control-group">
-                        <button
-                          type="button"
-                          className="qty-step-btn"
-                          onClick={() => onUpdateQuantity(item.productId, item.quantity - 1)}
-                          title="Giảm 1"
-                        >
-                          −
-                        </button>
-
-                        <input
-                          type="number"
-                          min="1"
-                          className="qty-number-input"
-                          value={item.quantity}
-                          onChange={(e) => {
-                            const val = parseInt(e.target.value, 10);
-                            onUpdateQuantity(item.productId, isNaN(val) ? 1 : Math.max(1, val));
-                          }}
-                          aria-label={`Số lượng cho ${item.product.name}`}
-                        />
 
                         <button
                           type="button"
-                          className="qty-step-btn"
-                          onClick={() => onUpdateQuantity(item.productId, item.quantity + 1)}
-                          title="Tăng 1"
+                          className="btn-remove-item"
+                          onClick={() => onRemoveItem(item.productId)}
+                          title="Xóa món này khỏi đơn"
+                          aria-label={`Xóa ${item.product.name} khỏi đơn`}
                         >
-                          +
+                          ✕
                         </button>
+                      </div>
 
-                        {/* Phím tăng nhanh: +1, +5, +10 */}
-                        <div className="quick-qty-chips">
+                      {/* Cảnh báo tồn kho nếu vượt quá */}
+                      {isOverStock && (
+                        <div className="item-stock-warning">
+                          ⚠️ Vượt quá tồn kho (Kho chỉ còn {item.product.stock} {item.product.unit})
+                        </div>
+                      )}
+
+                      {/* Hàng bộ chỉnh số lượng & Thành tiền */}
+                      <div className="item-control-row">
+                        <div className="item-stepper-box">
                           <button
                             type="button"
-                            className="quick-chip-btn"
-                            onClick={() => onUpdateQuantity(item.productId, item.quantity + 5)}
-                            title="Thêm 5 cái"
+                            className="item-stepper-btn minus"
+                            onClick={() => onUpdateQuantity(item.productId, item.quantity - 1)}
+                            title="Giảm 1"
+                            aria-label="Giảm 1"
                           >
-                            +5
+                            −
                           </button>
+
                           <button
                             type="button"
-                            className="quick-chip-btn"
-                            onClick={() => onUpdateQuantity(item.productId, item.quantity + 10)}
-                            title="Thêm 10 cái"
+                            className="item-stepper-qty-display"
+                            onClick={() => onOpenQuantityInput?.(item.product)}
+                            title="Bấm để gõ số lượng cụ thể (ví dụ: 10, 20...)"
+                            aria-label={`Số lượng hiện tại ${item.quantity} ${item.product.unit}. Bấm để nhập số khác`}
                           >
-                            +10
+                            <span className="stepper-val">{item.quantity}</span>
+                            <span className="stepper-unit-label">{item.product.unit}</span>
+                            <span className="stepper-edit-hint" aria-hidden="true">✏️</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="item-stepper-btn plus"
+                            onClick={() => onUpdateQuantity(item.productId, item.quantity + 1)}
+                            disabled={item.product.stock > 0 && item.quantity >= item.product.stock}
+                            title={
+                              item.product.stock > 0 && item.quantity >= item.product.stock
+                                ? 'Đã đạt giới hạn tồn kho'
+                                : 'Tăng 1'
+                            }
+                            aria-label="Tăng 1"
+                          >
+                            +
                           </button>
                         </div>
-                      </div>
 
-                      <div className="item-subtotal-box">
-                        <span className="item-unit-price">
-                          Đơn giá: {formatCurrency(item.salePrice)}
-                        </span>
-                        <strong className="item-total-amount">
-                          {formatCurrency(lineTotal)}
-                        </strong>
+                        <div className="item-subtotal-box">
+                          <span className="subtotal-calc-hint">
+                            {item.quantity} × {formatCurrency(item.salePrice)}
+                          </span>
+                          <strong className="item-total-amount">
+                            {formatCurrency(lineTotal)}
+                          </strong>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
 
-              {/* Thẻ tổng hợp tiền và tính tiền khách đưa */}
+              {/* Bảng tổng kết tiền */}
               <div className="checkout-summary-card">
                 <div className="summary-row">
-                  <span>Số lượng hàng:</span>
-                  <strong>{totalQuantity} {cartItems.length > 1 ? `món (${cartItems.length} loại hàng)` : 'món'}</strong>
+                  <span className="summary-label">Số lượng hàng hóa:</span>
+                  <span className="summary-value">
+                    <strong>{totalQuantity}</strong> {cartItems.length > 1 ? `món (${cartItems.length} loại)` : 'món'}
+                  </span>
                 </div>
 
                 <div className="summary-row grand-total">
@@ -409,91 +454,106 @@ export function CheckoutModal({
                   </span>
                 </div>
 
-                {/* Tính tiền thừa thối lại */}
-                <div className="cash-input-box">
-                  <div className="cash-input-label-row">
-                    <span>💵 Tiền khách đưa:</span>
+                {/* Phần tính tiền thừa thối lại cho khách (Gọn gàng, thanh lịch) */}
+                <div className="cash-section">
+                  <div className="cash-section-header">
+                    <button
+                      type="button"
+                      className="btn-toggle-cash"
+                      onClick={() => setShowCashCalc((prev) => !prev)}
+                    >
+                      <span aria-hidden="true">💵</span>
+                      <span>{showCashCalc ? 'Thu gọn tính tiền thối' : 'Tính tiền khách đưa & tiền thối'}</span>
+                      <span className="toggle-arrow">{showCashCalc ? '▲' : '▼'}</span>
+                    </button>
+
                     {parsedCashGiven > 0 && (
                       <button
                         type="button"
-                        style={{ background: 'none', border: 'none', color: '#0284c7', fontSize: '12px', cursor: 'pointer' }}
+                        className="btn-clear-cash"
                         onClick={() => setCashGivenInput('')}
                       >
-                        Xóa
+                        Xóa số tiền
                       </button>
                     )}
                   </div>
 
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    className="cash-amount-input"
-                    placeholder={`Nhập số tiền khách đưa (ví dụ: ${formatCurrency(totalAmount)})...`}
-                    value={cashGivenInput}
-                    onChange={(e) => {
-                      const num = parseCurrencyInput(e.target.value);
-                      setCashGivenInput(num > 0 ? formatCurrencyInput(num) : '');
-                    }}
-                  />
+                  {showCashCalc && (
+                    <div className="cash-calculator-panel">
+                      <div className="cash-input-row">
+                        <label htmlFor="cash-given-field" className="cash-field-label">
+                          Khách đưa:
+                        </label>
+                        <input
+                          id="cash-given-field"
+                          type="text"
+                          inputMode="numeric"
+                          className="cash-amount-input"
+                          placeholder={`Ví dụ: ${formatCurrency(totalAmount)}`}
+                          value={cashGivenInput}
+                          onChange={(e) => {
+                            const num = parseCurrencyInput(e.target.value);
+                            setCashGivenInput(num > 0 ? formatCurrencyInput(num) : '');
+                          }}
+                        />
+                      </div>
 
-                  {/* Nút gợi ý tiền nhanh */}
-                  <div className="cash-quick-chips">
-                    <button
-                      type="button"
-                      className="cash-chip-btn"
-                      onClick={() => setCashGivenInput(formatCurrencyInput(totalAmount))}
-                    >
-                      Đủ tiền ({formatCurrency(totalAmount)})
-                    </button>
-                    <button
-                      type="button"
-                      className="cash-chip-btn"
-                      onClick={() => setCashGivenInput(formatCurrencyInput(Math.ceil(totalAmount / 50000) * 50000))}
-                    >
-                      +{formatCurrency(Math.ceil(totalAmount / 50000) * 50000)}
-                    </button>
-                    {totalAmount < 100000 && (
-                      <button
-                        type="button"
-                        className="cash-chip-btn"
-                        onClick={() => setCashGivenInput(formatCurrencyInput(100000))}
-                      >
-                        100.000 ₫
-                      </button>
-                    )}
-                    {totalAmount < 200000 && (
-                      <button
-                        type="button"
-                        className="cash-chip-btn"
-                        onClick={() => setCashGivenInput(formatCurrencyInput(200000))}
-                      >
-                        200.000 ₫
-                      </button>
-                    )}
-                    {totalAmount < 500000 && (
-                      <button
-                        type="button"
-                        className="cash-chip-btn"
-                        onClick={() => setCashGivenInput(formatCurrencyInput(500000))}
-                      >
-                        500.000 ₫
-                      </button>
-                    )}
-                  </div>
+                      {/* Các phím chọn nhanh số tiền */}
+                      <div className="cash-quick-chips">
+                        <button
+                          type="button"
+                          className="cash-chip-btn"
+                          onClick={() => setCashGivenInput(formatCurrencyInput(totalAmount))}
+                        >
+                          Đủ tiền ({formatCurrency(totalAmount)})
+                        </button>
+                        {totalAmount < 100000 && (
+                          <button
+                            type="button"
+                            className="cash-chip-btn"
+                            onClick={() => setCashGivenInput(formatCurrencyInput(100000))}
+                          >
+                            100k
+                          </button>
+                        )}
+                        {totalAmount < 200000 && (
+                          <button
+                            type="button"
+                            className="cash-chip-btn"
+                            onClick={() => setCashGivenInput(formatCurrencyInput(200000))}
+                          >
+                            200k
+                          </button>
+                        )}
+                        {totalAmount < 500000 && (
+                          <button
+                            type="button"
+                            className="cash-chip-btn"
+                            onClick={() => setCashGivenInput(formatCurrencyInput(500000))}
+                          >
+                            500k
+                          </button>
+                        )}
+                      </div>
 
-                  {/* Tiền thừa thối lại */}
-                  {parsedCashGiven >= totalAmount && totalAmount > 0 && (
-                    <div className="change-row">
-                      <span>Tiền thối lại cho khách:</span>
-                      <span className="change-value">
-                        {formatCurrency(changeToReturn)}
-                      </span>
-                    </div>
-                  )}
+                      {/* Tiền thừa thối lại */}
+                      {parsedCashGiven >= totalAmount && totalAmount > 0 && (
+                        <div className="change-result-row success">
+                          <span>Tiền thối lại cho khách:</span>
+                          <strong className="change-value">
+                            {formatCurrency(changeToReturn)}
+                          </strong>
+                        </div>
+                      )}
 
-                  {parsedCashGiven > 0 && parsedCashGiven < totalAmount && (
-                    <div style={{ color: '#dc2626', fontSize: '13px', fontWeight: 600 }}>
-                      Khách còn thiếu: {formatCurrency(totalAmount - parsedCashGiven)}
+                      {parsedCashGiven > 0 && parsedCashGiven < totalAmount && (
+                        <div className="change-result-row warning">
+                          <span>Khách còn thiếu:</span>
+                          <strong className="missing-value">
+                            {formatCurrency(totalAmount - parsedCashGiven)}
+                          </strong>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -502,7 +562,7 @@ export function CheckoutModal({
           )}
         </div>
 
-        {/* Nút hành động Footer */}
+        {/* Thanh nút hành động ghim cố định ở đáy */}
         {cartItems.length > 0 && (
           <div className="checkout-footer">
             <div className="checkout-action-row">
@@ -510,9 +570,9 @@ export function CheckoutModal({
                 type="button"
                 className="btn-copy-receipt"
                 onClick={handleCopyReceipt}
-                title="Sao chép hóa đơn để gửi Zalo cho khách"
+                title="Sao chép hóa đơn để dán gửi Zalo cho khách"
               >
-                <span>📋</span>
+                <span aria-hidden="true">📋</span>
                 <span>Sao chép bill</span>
               </button>
 
@@ -530,7 +590,7 @@ export function CheckoutModal({
                 }
               >
                 {isCheckingOut ? (
-                  <span>⏳ Đang xử lý trừ kho...</span>
+                  <span>⏳ Đang trừ kho...</span>
                 ) : (
                   <span>✅ Bán & Trừ kho ({formatCurrency(totalAmount)})</span>
                 )}
