@@ -333,10 +333,12 @@ export async function analyzeProductImage(
 ): Promise<GeminiAnalysisResult> {
   const startTime = performance.now();
   const apiKey = Deno.env.get('GEMINI_API_KEY');
-  const primaryModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3.6-flash';
+  const primaryModel = Deno.env.get('GEMINI_MODEL') || 'gemini-3.8-flash';
   // Các model dự phòng theo thứ tự ưu tiên khi model chính bị quá tải (503 / 429)
   const candidateModels = [
     primaryModel,
+    'gemini-3.8-flash',
+    'gemini-3.6-flash',
     'gemini-2.5-flash',
     'gemini-2.0-flash',
     'gemini-1.5-flash',
