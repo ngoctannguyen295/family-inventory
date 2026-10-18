@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
+import './Login.css';
 
 interface LoginProps {
   onLoginSuccess?: () => void;
@@ -58,26 +59,22 @@ export function Login({ onLoginSuccess }: LoginProps) {
   };
 
   return (
-    <div className="login-container">
-      <div className="login-card">
-        <div className="login-header">
-          <div className="brand-badge">
-            <img src="/pwa-192x192.png" alt="Logo" className="brand-avatar-img" />
-            Quản lý hàng hoá
+    <div className="login-page-container">
+      <div className="login-auth-card">
+        {/* Header với ảnh đại diện nổi bật & Tên ứng dụng */}
+        <div className="login-brand-header">
+          <div className="login-avatar-ring">
+            <img src="/pwa-192x192.png" alt="Ảnh đại diện ứng dụng" className="login-avatar-img" />
           </div>
-          <h1 className="login-title">Đăng nhập</h1>
-          <p className="login-subtitle">
-            Hệ thống quản lý hàng hóa và tồn kho
-          </p>
+          <h1 className="login-app-title">Quản lý hàng hoá</h1>
+          <p className="login-app-subtitle">Đăng nhập tài khoản để vào hệ thống</p>
         </div>
 
         {errorMessage && (
-          <div className="login-alert-error" role="alert" aria-live="assertive">
+          <div className="login-alert-box" role="alert" aria-live="assertive">
             <svg
-              className="alert-icon"
+              className="login-alert-icon"
               xmlns="http://www.w3.org/2000/svg"
-              width="18"
-              height="18"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -94,53 +91,92 @@ export function Login({ onLoginSuccess }: LoginProps) {
           </div>
         )}
 
-        <form className="login-form" onSubmit={handleSubmit} noValidate>
-          <div className="form-group">
-            <label htmlFor="login-email" className="form-label">
-              Địa chỉ Email
+        <form className="login-auth-form" onSubmit={handleSubmit} noValidate>
+          {/* Ô nhập Email */}
+          <div className="login-field-group">
+            <label htmlFor="login-email" className="login-field-label">
+              <span>📧</span>
+              <span>Địa chỉ Email</span>
             </label>
-            <input
-              id="login-email"
-              type="email"
-              className="text-input"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="nhap-email@vidu.com"
-              required
-              autoComplete="email"
-              disabled={isSubmitting}
-            />
+            <div className="login-field-wrapper">
+              <span className="login-leading-icon" aria-hidden="true">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                  <polyline points="22,6 12,13 2,6"></polyline>
+                </svg>
+              </span>
+              <input
+                id="login-email"
+                type="email"
+                className="login-input-control"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Ví dụ: admin@gmail.com"
+                required
+                autoComplete="email"
+                disabled={isSubmitting}
+              />
+            </div>
           </div>
 
-          <div className="form-group">
-            <label htmlFor="login-password" className="form-label">
-              Mật khẩu
+          {/* Ô nhập Mật khẩu */}
+          <div className="login-field-group">
+            <label htmlFor="login-password" className="login-field-label">
+              <span>🔒</span>
+              <span>Mật khẩu</span>
             </label>
-            <div className="password-input-wrapper">
+            <div className="login-field-wrapper">
+              <span className="login-leading-icon" aria-hidden="true">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+              </span>
               <input
                 id="login-password"
                 type={showPassword ? 'text' : 'password'}
-                className="text-input password-input"
+                className="login-input-control is-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Nhập mật khẩu"
+                placeholder="Nhập mật khẩu của bạn"
                 required
                 autoComplete="current-password"
                 disabled={isSubmitting}
               />
               <button
                 type="button"
-                className="password-toggle-btn"
+                className="login-password-toggle-btn"
                 onClick={() => setShowPassword((prev) => !prev)}
                 aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                title={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
                 tabIndex={0}
                 disabled={isSubmitting}
               >
                 {showPassword ? (
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    width="18"
-                    height="18"
+                    width="20"
+                    height="20"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -155,8 +191,8 @@ export function Login({ onLoginSuccess }: LoginProps) {
                 ) : (
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    width="18"
-                    height="18"
+                    width="20"
+                    height="20"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -173,21 +209,29 @@ export function Login({ onLoginSuccess }: LoginProps) {
             </div>
           </div>
 
+          {/* Nút Đăng nhập */}
           <button
             type="submit"
-            className="login-submit-btn"
+            className="login-submit-button"
             disabled={isSubmitting}
           >
             {isSubmitting ? (
-              <span className="btn-loading-state">
-                <span className="spinner-dot" aria-hidden="true"></span>
-                Đang đăng nhập...
-              </span>
+              <>
+                <span className="login-btn-spinner" aria-hidden="true"></span>
+                <span>Đang đăng nhập...</span>
+              </>
             ) : (
-              'Đăng nhập'
+              <span>Đăng nhập</span>
             )}
           </button>
         </form>
+
+        <div className="login-card-footer">
+          <p className="login-footer-hint">
+            <span>🛡️</span>
+            <span>Hệ thống kho nội bộ • Dành cho thành viên được cấp quyền</span>
+          </p>
+        </div>
       </div>
     </div>
   );
