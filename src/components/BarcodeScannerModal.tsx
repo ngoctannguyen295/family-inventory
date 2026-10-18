@@ -631,7 +631,7 @@ export function BarcodeScannerModal({
                   Chưa có sản phẩm mang mã {scannedBarcode}
                 </h3>
                 <p className="scanner-not-found-desc">
-                  Mã vạch này chưa được gán cho mặt hàng nào trong danh mục kho gia đình.
+                  Mã vạch này chưa được gán cho mặt hàng nào trong danh mục hàng hoá.
                 </p>
                 <div className="scanner-action-row">
                   <button

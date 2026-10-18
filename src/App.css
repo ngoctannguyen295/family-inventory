@@ -69,6 +69,16 @@
   border-radius: var(--radius-full);
 }
 
+.brand-avatar-img {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  border: 1.5px solid #ffffff;
+  flex-shrink: 0;
+}
+
 /* User profile in Header */
 .user-profile-bar {
   display: flex;

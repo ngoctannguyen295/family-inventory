@@ -192,7 +192,7 @@ export function UserProfilePage({
         {/* Tiêu đề trang Hero */}
         <header className="profile-hero-header">
           <div className="profile-breadcrumb">
-            <span>Kho gia đình</span>
+            <span>Quản lý hàng hoá</span>
             <span aria-hidden="true">/</span>
             <span>Cài đặt tài khoản & Hồ sơ</span>
           </div>

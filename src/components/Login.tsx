@@ -62,12 +62,12 @@ export function Login({ onLoginSuccess }: LoginProps) {
       <div className="login-card">
         <div className="login-header">
           <div className="brand-badge">
-            <span className="brand-dot" aria-hidden="true"></span>
-            Family Inventory
+            <img src="/pwa-192x192.png" alt="Logo" className="brand-avatar-img" />
+            Quản lý hàng hoá
           </div>
           <h1 className="login-title">Đăng nhập</h1>
           <p className="login-subtitle">
-            Hệ thống quản lý hàng hóa nội bộ gia đình
+            Hệ thống quản lý hàng hóa và tồn kho
           </p>
         </div>
 

@@ -1297,7 +1297,7 @@ export function App() {
         </main>
 
         <footer className="app-footer">
-          <p>Kho gia đình • Quản lý hàng hóa và kho nội bộ gia đình</p>
+          <p>Quản lý hàng hoá • Quản lý kho nội bộ</p>
           {canEdit && (
             <div style={{ marginTop: '8px' }}>
               <button

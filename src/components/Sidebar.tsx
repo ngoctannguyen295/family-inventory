@@ -90,11 +90,13 @@ export function Sidebar({
             onClick={() => handleNavClick(onNavigateInventory)}
             title="Về trang chủ danh sách kho hàng"
           >
-            <div className="sidebar-brand-logo-icon" aria-hidden="true">
-              📦
-            </div>
+            <img
+              src="/pwa-192x192.png"
+              alt="Logo"
+              className="sidebar-brand-avatar-img"
+            />
             <div className="sidebar-brand-text-group">
-              <span className="sidebar-brand-title">Kho Gia Đình</span>
+              <span className="sidebar-brand-title">Quản lý hàng hoá</span>
               <span className="sidebar-brand-subtitle">Quản lý & Tồn kho</span>
             </div>
           </button>

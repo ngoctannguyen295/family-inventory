@@ -69,9 +69,9 @@ export default defineConfig({
         'apple-touch-icon-180x180.png',
       ],
       manifest: {
-        name: 'Hàng hóa gia đình',
-        short_name: 'Kho gia đình',
-        description: 'Ứng dụng quản lý hàng hóa và tồn kho gia đình tiện lợi, trực quan',
+        name: 'Quản lý hàng hoá',
+        short_name: 'Quản lý hàng hoá',
+        description: 'Ứng dụng quản lý hàng hóa và tồn kho tiện lợi, trực quan',
         lang: 'vi',
         id: '/',
         start_url: '/',

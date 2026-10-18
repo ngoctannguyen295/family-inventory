@@ -124,7 +124,7 @@ export function DeletedProductsModal({
               </div>
               <h3 className="deleted-empty-title">Mục Đã xóa đang trống</h3>
               <p className="deleted-empty-desc">
-                Chưa có sản phẩm nào bị xóa trong kho gia đình.
+                Chưa có sản phẩm nào bị xóa trong danh mục hàng hoá.
               </p>
             </div>
           )}

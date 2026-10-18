@@ -757,7 +757,7 @@ export function ImageSearchModal({
                 <strong>Tìm kiếm bằng hình ảnh:</strong>
                 <p>
                   Ảnh được phân tích để đọc bao bì hoặc trích xuất đặc trưng vật thể (đối với đồ không nhãn mác),
-                  sau đó đối chiếu với các sản phẩm trong kho gia đình.
+                  sau đó đối chiếu với các sản phẩm trong danh mục hàng hoá.
                 </p>
               </div>
             </div>
@@ -880,7 +880,7 @@ export function ImageSearchModal({
                     ? 'Đang chuẩn bị & tối ưu ảnh...'
                     : searchStep === 'analyzing'
                     ? 'Đang nhận diện sản phẩm & vật thể...'
-                    : 'Đang đối chiếu kho gia đình...'}
+                    : 'Đang đối chiếu dữ liệu hàng hoá...'}
                 </h3>
                 <p className="loading-subtitle">
                   {searchStep === 'optimizing'
@@ -966,7 +966,7 @@ export function ImageSearchModal({
                   <h3 className="empty-title">Không tìm thấy sản phẩm trong kho</h3>
                   <p className="empty-desc">
                     {searchResponse.message ||
-                      'Đã nhận diện được bao bì nhưng trong kho gia đình chưa có sản phẩm nào phù hợp.'}
+                      'Đã nhận diện được bao bì nhưng trong danh mục hàng hoá chưa có sản phẩm nào phù hợp.'}
                   </p>
                   <div className="empty-actions-row">
                     <button

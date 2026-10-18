@@ -45,8 +45,8 @@ export function Header({
             </button>
           )}
           <div className="brand-badge">
-            <span className="brand-dot" aria-hidden="true"></span>
-            <span className="brand-name">Kho gia đình</span>
+            <img src="/pwa-192x192.png" alt="Logo" className="brand-avatar-img" />
+            <span className="brand-name">Quản lý hàng hoá</span>
           </div>
         </div>
 
@@ -92,7 +92,7 @@ export function Header({
 
       <div className="header-main">
         <div className="header-title-group">
-          <h1 className="header-title">Kho gia đình</h1>
+          <h1 className="header-title">Quản lý hàng hoá</h1>
           <div className="header-stat">
             <span className="stat-label">Tổng số:</span>
             <strong className="stat-number">{totalCount}</strong>
